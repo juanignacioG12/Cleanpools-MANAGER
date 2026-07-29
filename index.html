@@ -643,6 +643,22 @@ textarea.minput{resize:vertical;min-height:70px;font-family:inherit}
 
 @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 
+
+/* ── HISTORIAL CLIENTE ── */
+.hist-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.hist-item:last-child{border-bottom:none}
+.hist-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.hist-done{background:var(--green)}
+.hist-pend{background:var(--text3)}
+.hist-info{flex:1}
+.hist-date{font-size:12px;font-weight:700;color:var(--text)}
+.hist-svc{font-size:10px;color:var(--text3);margin-top:2px}
+.hist-notes{font-size:10px;color:var(--c5);margin-top:3px;font-style:italic}
+.hist-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 16px 12px}
+.hist-stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:10px;text-align:center}
+.hist-stat-val{font-size:16px;font-weight:800;color:var(--c6)}
+.hist-stat-lbl{font-size:9px;color:var(--text3);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
+
 .login-error{
   color:var(--red);font-size:12px;font-weight:700;
   text-align:center;margin-top:16px;min-height:18px;
@@ -1126,6 +1142,10 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         <div class="btn-generar" onclick="generarRecorrido()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M5 8v2a4 4 0 004 4h6a4 4 0 004-4V8M12 14v2"/></svg>
           Generar recorrido optimizado
+        </div>
+        <div class="btn-generar" onclick="exportAgendaWhatsApp()" style="color:var(--green);border-color:rgba(78,216,160,.3)">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.559 4.122 1.535 5.856L.057 23.882l6.198-1.625A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.658-.523-5.168-1.432l-.371-.221-3.677.964.981-3.581-.242-.379A9.932 9.932 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+          Compartir por WhatsApp
         </div>
       </div>
     </div>
@@ -1860,7 +1880,7 @@ function plannerNavigate(){
 }
 function buildRoute(){
   const jobs=jobsFor(routeDate).slice().sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-  if(!jobs.length){toast('No hay trabajos programados para esta fecha');return;}
+  if(!jobs.length){toast('Sin trabajos programados para esta fecha.');return;}
   showPage('mapa',null);
   setTimeout(()=>{
     if(routeLayer)map.removeLayer(routeLayer);
@@ -1908,8 +1928,13 @@ function renderToday(){
       <div class="wi-r">
         <div class="wi-price">$${(c.price/1000).toFixed(0)}K</div>
         <div class="wi-time">${j.time} ${j.status==='done'?'✓':j.status==='now'?'●':''}</div>
-        <div class="jcard-more" style="margin-top:6px;margin-left:auto" onclick="event.stopPropagation();openActions('${TODAY_KEY}',${j.idx})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+          <div class="jcard-more" onclick="event.stopPropagation();openActions('${TODAY_KEY}',${j.idx})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </div>
+          ${(currentUser?.rol==='admin'||currentUser?.rol==='administrador')?`<div class="jcard-more" style="background:rgba(123,189,232,.15)" onclick="event.stopPropagation();openAsignar('${TODAY_KEY}',${j.idx})" title="Asignar a empleado">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--c6)" stroke-width="2.5" width="14" height="14"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </div>`:''}
         </div>
       </div>
     </div>`;
@@ -1926,13 +1951,76 @@ function toggleWork(dateKey,idx){
 
 // ── CLIENTS ──
 let sfil=null;
+
+// ── HISTORIAL DE VISITAS POR CLIENTE ──
+function showClientHistory(clientId){
+  const cl = clients[clientId];
+  if(!cl) return;
+  window._histClientId = clientId;
+
+  document.getElementById('hist-client-name').textContent = cl.n;
+
+  // Info del cliente
+  const info = [];
+  if(cl.phone)    info.push('📞 '+cl.phone);
+  if(cl.address)  info.push('📍 '+cl.address);
+  if(cl.zone)     info.push('🗺 '+cl.zone);
+  if(cl.service)  info.push('🔧 '+cl.service);
+  if(cl.price)    info.push('💰 $'+cl.price.toLocaleString('es-AR')+'/visita');
+  if(cl.notes)    info.push('📝 '+cl.notes);
+  document.getElementById('hist-client-info').innerHTML = info.join('<br>');
+
+  // Recopilar todas las visitas de este cliente desde schedule
+  const visits = [];
+  Object.keys(schedule).sort().reverse().forEach(dateKey=>{
+    (schedule[dateKey]||[]).forEach((e,idx)=>{
+      if(e.clientId !== clientId) return;
+      visits.push({dateKey, idx, ...e, client:cl});
+    });
+  });
+
+  // Estadísticas
+  const done  = visits.filter(v=>v.status==='done').length;
+  const total = visits.length;
+  const ingresos = done * (cl.price||0);
+
+  document.getElementById('hs-total').textContent   = total;
+  document.getElementById('hs-done').textContent    = done;
+  document.getElementById('hs-ingresos').textContent= '$'+(ingresos>=1000?(ingresos/1000).toFixed(0)+'K':ingresos);
+
+  // Lista de visitas
+  const el = document.getElementById('hist-list');
+  if(!visits.length){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Sin visitas registradas</div>';
+  } else {
+    const MONTHS=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    el.innerHTML = visits.map(v=>{
+      const [y,m,d] = v.dateKey.split('-').map(Number);
+      const dateStr = d+' '+MONTHS[m-1]+' '+y;
+      const stLabel = v.status==='done' ? 'Completado ✓' : v.status==='now' ? 'En curso' : 'Pendiente';
+      return `<div class="hist-item">
+        <div class="hist-dot ${v.status==='done'?'hist-done':'hist-pend'}"></div>
+        <div class="hist-info">
+          <div class="hist-date">${dateStr} ${v.time?'· '+v.time:''}</div>
+          <div class="hist-svc">${cl.service} · <span style="color:${v.status==='done'?'var(--green)':'var(--text3)'}">${stLabel}</span></div>
+          ${v.notes?'<div class="hist-notes">📝 '+v.notes+'</div>':''}
+        </div>
+        <div style="font-size:11px;font-weight:800;color:var(--c6);flex-shrink:0">
+          ${v.status==='done'?'$'+(cl.price/1000).toFixed(0)+'K':'–'}
+        </div>
+      </div>`;
+    }).join('');
+  }
+  openModal('historial');
+}
+
 function renderClients(list){
   const el=document.getElementById('client-list');
   if(!list.length){el.innerHTML='<div class="nodata">Sin resultados</div>';return;}
   el.innerHTML=list.map(c=>`
     <div class="cr">
       <div class="cav ${c.avc}">${c.av}</div>
-      <div style="flex:1;min-width:0" onclick="editClient(${c.id})">
+      <div style="flex:1;min-width:0" onclick="showClientHistory(${c.id})">
         <div class="cn">${c.n}</div>
         <div class="cz">${c.zone} · ${c.service} · Últ: ${c.last}</div>
         ${c.notes?`<div class="jcard-notes" style="margin-top:4px">📝 ${c.notes}</div>`:''}
@@ -2462,8 +2550,13 @@ function renderAgendaList(key){
             Navegar
           </a></div>
         </div>
-        <div class="jcard-more" onclick="openActions('${key}',${j.idx})">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="jcard-more" onclick="openActions('${key}',${j.idx})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </div>
+          ${(currentUser?.rol==='admin'||currentUser?.rol==='administrador')?`<div class="jcard-more" style="background:rgba(123,189,232,.15)" onclick="openAsignar('${key}',${j.idx})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--c6)" stroke-width="2.5" width="14" height="14"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          </div>`:''}
         </div>
       </div>
     </div>`;
@@ -3947,9 +4040,18 @@ async function attemptLogin(){
     const {data,error}=await sb.from('users').select('*').eq('id',userId).eq('pin',pinBuffer).eq('activo',true).single();
     if(error||!data){ errEl.textContent='❌ PIN incorrecto'; pinBuffer=''; updatePinDisplay(); return; }
     currentUser=data;
-    localStorage.setItem('cp_session',JSON.stringify({id:data.id,nombre:data.nombre,rol:data.rol}));
-    errEl.textContent='';
-    enterApp();
+    // Si el PIN es el default 0000, forzar cambio
+    if(pinBuffer==='0000' && data.rol==='admin'){
+      localStorage.setItem('cp_session',JSON.stringify({id:data.id,nombre:data.nombre,rol:data.rol}));
+      errEl.textContent='';
+      enterApp();
+      // Mostrar aviso de cambio de PIN después de entrar
+      setTimeout(()=>{ toast('⚠ Por seguridad, cambiá tu PIN en la sección Equipo'); },1500);
+    } else {
+      localStorage.setItem('cp_session',JSON.stringify({id:data.id,nombre:data.nombre,rol:data.rol}));
+      errEl.textContent='';
+      enterApp();
+    }
   }catch(e){ errEl.textContent='Error de conexión'; pinBuffer=''; updatePinDisplay(); }
 }
 
@@ -3965,6 +4067,40 @@ function enterApp(){
   applyRoleRestrictions();
   syncFromSupabase();
   subscribeRealtime();
+  initNotifications();
+  // Migrar clientes base a Supabase si es admin y es la primera vez
+  if(currentUser?.rol==='admin'){
+    setTimeout(()=>migrateBaseClientsToSupabase(), 2000);
+  }
+}
+
+// ── MIGRAR CLIENTES BASE A SUPABASE (solo una vez) ──
+async function migrateBaseClientsToSupabase(){
+  try{
+    const {count} = await sb.from('clientes').select('*',{count:'exact',head:true});
+    if(count > 0){ console.log('[SB] Clientes ya migrados: '+count); return; }
+    console.log('[SB] Migrando '+clients.length+' clientes...');
+    toast('⏳ Sincronizando clientes con la nube...');
+    const BATCH=20;
+    let migrated=0;
+    for(let i=0;i<clients.length;i+=BATCH){
+      const batch=clients.slice(i,i+BATCH).filter(cl=>!cl.deleted).map(cl=>({
+        nombre:cl.n, telefono:cl.phone||'', direccion:cl.address||cl.zone||'',
+        zona:cl.zone||'Capital', servicio:cl.service||'Mant. semanal', precio:cl.price||0,
+        lat:cl.lat||null, lng:cl.lng||null, google_maps_url:cl.googleMapsUrl||'',
+        notas:cl.notes||'', status:cl.status||'activo', deleted:false
+      }));
+      const {data,error}=await sb.from('clientes').insert(batch).select();
+      if(error){console.warn('[SB] batch error:',error);continue;}
+      if(data) data.forEach((row,j)=>{const local=clients[i+j];if(local)local.supabase_id=row.id;});
+      migrated+=batch.length;
+    }
+    dbSave();
+    toast('✅ '+migrated+' clientes sincronizados con la nube');
+  }catch(e){
+    console.warn('[SB] migrate error:',e);
+    toast('⚠ Error al sincronizar clientes.');
+  }
 }
 
 function applyRoleRestrictions(){
@@ -4050,7 +4186,17 @@ function subscribeRealtime(){
     filterClients(); if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
   }).subscribe();
   sb.channel('trabajos-rt').on('postgres_changes',{event:'*',schema:'public',table:'trabajos'},()=>{
-    syncTrabajosDelDia().then(()=>{ renderToday(); if(currentUser?.rol==='empleado')renderEmpleadoView(); });
+    const prevCount=(schedule[TODAY_KEY]||[]).length;
+    syncTrabajosDelDia().then(()=>{
+      renderToday();
+      if(currentUser?.rol==='empleado'){
+        renderEmpleadoView();
+        const newCount=(schedule[TODAY_KEY]||[]).length;
+        if(newCount>prevCount){
+          sendNotif('Clean Pools SJ','Tenés un nuevo trabajo asignado para hoy 📋');
+        }
+      }
+    });
   }).subscribe();
 }
 
@@ -4100,6 +4246,61 @@ async function empToggleDone(dateKey,idx){
   renderEmpleadoView(); renderToday();
   if(e.supabase_id) await sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id);
   dbSave();
+}
+
+
+// ── NOTIFICACIONES PUSH (Web Notifications API) ──
+async function requestNotifPermission(){
+  if(!('Notification' in window)) return;
+  if(Notification.permission === 'granted') return;
+  if(Notification.permission !== 'denied'){
+    await Notification.requestPermission();
+  }
+}
+
+function sendNotif(title, body, url){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  const notif = new Notification(title, {
+    body,
+    icon: document.querySelector('link[rel="apple-touch-icon"]')?.href || '',
+    badge: document.querySelector('link[rel="apple-touch-icon"]')?.href || '',
+    tag: 'cleanpools-'+Date.now(),
+    renotify: true,
+  });
+  if(url) notif.onclick = ()=>{ window.focus(); notif.close(); };
+}
+
+// Llamar al entrar a la app
+function initNotifications(){
+  if(currentUser?.rol === 'empleado'){
+    requestNotifPermission();
+  }
+}
+
+// ── EXPORTAR AGENDA (WhatsApp / compartir) ──
+function exportAgendaWhatsApp(){
+  const jobs=jobsFor(routeDate).slice().sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  if(!jobs.length){toast('Sin trabajos para exportar');return;}
+  const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const [y,m,d]=routeDate.split('-').map(Number);
+  let msg='📋 *Agenda Clean Pools SJ*\n📅 '+d+' de '+MONTHS[m-1]+' de '+y+'\n─────────────────\n\n';
+  jobs.forEach((j,i)=>{
+    const cl=j.client;
+    msg+=(i+1)+'. *'+cl.n+'*\n';
+    if(j.time) msg+='🕐 '+j.time+'\n';
+    msg+='🔧 '+cl.service+'\n';
+    if(cl.address) msg+='📍 '+cl.address+'\n';
+    if(j.notes) msg+='📝 '+j.notes+'\n';
+    if(validCoord(cl.lat,cl.lng)) msg+='🗺 https://maps.google.com/?q='+cl.lat+','+cl.lng+'\n';
+    msg+='\n';
+  });
+  const total=jobs.reduce((a,j)=>a+(j.client.price||0),0);
+  msg+='─────────────────\n💰 Total: $'+total.toLocaleString('es-AR')+'\n📊 '+jobs.length+' paradas';
+  if(navigator.share){
+    navigator.share({title:'Agenda Clean Pools SJ',text:msg}).catch(()=>window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'));
+  } else {
+    window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+  }
 }
 
 async function loadUsuarios(){
@@ -4274,6 +4475,31 @@ async function saveAsignacion(){
     <div class="mactions">
       <div class="bcancel" onclick="closeModal('asignar')">Cancelar</div>
       <div class="bconfirm" onclick="saveAsignacion()">Asignar ✓</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL HISTORIAL CLIENTE -->
+<div class="modal-overlay" id="modal-historial" onclick="if(event.target===this)closeModal('historial')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="mtitle" id="hist-client-name" style="margin:0">Historial</div>
+      <div class="bconfirm" style="padding:6px 12px;font-size:11px;cursor:pointer" onclick="closeModal('historial');editClient(window._histClientId)">✏ Editar</div>
+    </div>
+    <!-- Stats -->
+    <div class="hist-stats">
+      <div class="hist-stat"><div class="hist-stat-val" id="hs-total">0</div><div class="hist-stat-lbl">Visitas</div></div>
+      <div class="hist-stat"><div class="hist-stat-val" id="hs-done">0</div><div class="hist-stat-lbl">Completadas</div></div>
+      <div class="hist-stat"><div class="hist-stat-val" id="hs-ingresos">$0</div><div class="hist-stat-lbl">Generado</div></div>
+    </div>
+    <!-- Info del cliente -->
+    <div id="hist-client-info" style="padding:0 16px 12px;font-size:11px;color:var(--text3);line-height:1.8"></div>
+    <!-- Lista de visitas -->
+    <div class="slabel" style="padding-top:0">Visitas registradas</div>
+    <div style="padding:0 16px;max-height:260px;overflow-y:auto">
+      <div id="hist-list"></div>
     </div>
   </div>
 </div>
