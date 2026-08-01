@@ -4202,23 +4202,35 @@ function subscribeRealtime(){
 
 async function saveClienteToSupabase(cl){
   const p={nombre:cl.n,telefono:cl.phone||'',direccion:cl.address||'',zona:cl.zone,servicio:cl.service,
-    precio:cl.price,lat:cl.lat,lng:cl.lng,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
+    precio:cl.price,lat:cl.lat||null,lng:cl.lng||null,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
     status:cl.status,deleted:cl.deleted||false,updated_at:new Date().toISOString()};
-  try{
-    if(cl.supabase_id){ await sb.from('clientes').update(p).eq('id',cl.supabase_id); }
-    else{ const {data}=await sb.from('clientes').insert(p).select().single(); if(data)cl.supabase_id=data.id; }
-  }catch(e){ console.warn('[SB] saveCliente error',e); }
+  if(cl.supabase_id){
+    const {error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id);
+    if(error) throw error;
+  } else {
+    const {data,error}=await sb.from('clientes').insert(p).select().single();
+    if(error) throw error;
+    if(data) cl.supabase_id=data.id;
+  }
 }
 
 async function saveTrabajoToSupabase(job,dateKey){
-  const cl=clients[job.clientId]; if(!cl)return;
-  if(!cl.supabase_id)await saveClienteToSupabase(cl);
+  const cl=clients[job.clientId];
+  if(!cl) throw new Error('Cliente no encontrado para el trabajo');
+  // Asegurar que el cliente existe en Supabase primero
+  if(!cl.supabase_id) await saveClienteToSupabase(cl);
+  if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
   const p={cliente_id:cl.supabase_id,fecha:dateKey,hora_inicio:job.time||'',hora_fin:job.endTime||'',
     notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,updated_at:new Date().toISOString()};
-  try{
-    if(job.supabase_id){ await sb.from('trabajos').update(p).eq('id',job.supabase_id); }
-    else{ const {data}=await sb.from('trabajos').insert(p).select().single(); if(data)job.supabase_id=data.id; }
-  }catch(e){ console.warn('[SB] saveTrabajo error',e); }
+  if(job.supabase_id){
+    const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
+    if(error) throw error;
+  } else {
+    const {data,error}=await sb.from('trabajos').insert(p).select().single();
+    if(error) throw error;
+    if(data) job.supabase_id=data.id;
+    else throw new Error('Supabase no devolvió el ID del trabajo');
+  }
 }
 
 function renderEmpleadoView(){
@@ -4351,27 +4363,95 @@ async function deleteUser(){
 }
 
 async function openAsignar(dateKey,idx){
-  const e=schedule[dateKey][idx]; const cl=clients[e.clientId];
-  document.getElementById('asig-job-info').value=(cl?.n||'?')+' · '+(e.time||'')+' · '+dateKey;
+  const e=schedule[dateKey][idx];
+  if(!e){ toast('⚠ Trabajo no encontrado'); return; }
+  const cl=clients[e.clientId];
+
+  // Mostrar info del trabajo
+  document.getElementById('asig-job-info').value=(cl?.n||'?')+' · '+(e.time||'sin hora')+' · '+dateKey;
   document.getElementById('asig-job-id').value=JSON.stringify({dateKey,idx});
-  const {data}=await sb.from('users').select('id,nombre,rol').eq('activo',true);
+
+  // Cargar empleados desde Supabase
   const sel=document.getElementById('asig-user-select');
-  sel.innerHTML='<option value="">Sin asignar</option>'+(data||[]).map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
-  if(e.asignaciones&&e.asignaciones.length)sel.value=e.asignaciones[0].user_id||'';
+  sel.innerHTML='<option value="">⏳ Cargando...</option>';
   openModal('asignar');
+
+  try{
+    const {data,error}=await sb.from('users').select('id,nombre,rol').eq('activo',true).order('nombre');
+    if(error) throw error;
+    sel.innerHTML='<option value="">— Sin asignar —</option>'+
+      (data||[]).map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+    // Pre-seleccionar asignación existente
+    if(e.asignaciones&&e.asignaciones.length){
+      sel.value=e.asignaciones[0].user_id||'';
+    }
+  }catch(err){
+    sel.innerHTML='<option value="">Error al cargar usuarios</option>';
+    console.warn('[SB] openAsignar load users error:',err);
+  }
 }
 
 async function saveAsignacion(){
   const raw=document.getElementById('asig-job-id').value;
-  const {dateKey,idx}=JSON.parse(raw); const e=schedule[dateKey][idx];
+  if(!raw){ toast('⚠ Error: no hay trabajo seleccionado'); return; }
+
+  const {dateKey,idx}=JSON.parse(raw);
+  const e=schedule[dateKey]?.[idx];
+  if(!e){ toast('⚠ Trabajo no encontrado'); closeModal('asignar'); return; }
+
   const userId=document.getElementById('asig-user-select').value;
+  const cl=clients[e.clientId];
+
+  // Mostrar estado de carga
+  const btnConfirm=document.querySelector('#modal-asignar .bconfirm');
+  if(btnConfirm){ btnConfirm.textContent='Guardando...'; btnConfirm.style.opacity='.6'; }
+
   try{
-    if(!e.supabase_id)await saveTrabajoToSupabase(e,dateKey);
-    await sb.from('asignaciones').delete().eq('trabajo_id',e.supabase_id);
-    if(userId){ await sb.from('asignaciones').insert({trabajo_id:e.supabase_id,user_id:userId}); e.asignaciones=[{user_id:userId}]; toast('✓ Trabajo asignado'); }
-    else{ e.asignaciones=[]; toast('✓ Asignación removida'); }
+    // Paso 1: asegurar que el cliente existe en Supabase
+    if(cl && !cl.supabase_id){
+      await saveClienteToSupabase(cl);
+    }
+
+    // Paso 2: asegurar que el trabajo existe en Supabase
+    if(!e.supabase_id){
+      await saveTrabajoToSupabase(e, dateKey);
+    }
+
+    // Paso 3: verificar que tenemos supabase_id del trabajo
+    if(!e.supabase_id){
+      throw new Error('No se pudo crear el trabajo en la base de datos. Verificá tu conexión.');
+    }
+
+    // Paso 4: borrar asignaciones anteriores
+    const {error:delErr}=await sb.from('asignaciones').delete().eq('trabajo_id',e.supabase_id);
+    if(delErr) throw delErr;
+
+    // Paso 5: crear nueva asignación si se eligió un usuario
+    if(userId){
+      const {error:insErr}=await sb.from('asignaciones').insert({trabajo_id:e.supabase_id,user_id:userId});
+      if(insErr) throw insErr;
+      e.asignaciones=[{user_id:userId}];
+
+      // Obtener nombre del empleado para el toast
+      const sel=document.getElementById('asig-user-select');
+      const empName=sel.options[sel.selectedIndex]?.text||'empleado';
+      toast('✓ Trabajo asignado a '+empName);
+    } else {
+      e.asignaciones=[];
+      toast('✓ Asignación removida');
+    }
+
+    dbSave();
     closeModal('asignar');
-  }catch(err){toast('Error: '+err.message);}
+    renderToday();
+    if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
+
+  }catch(err){
+    console.warn('[SB] saveAsignacion error:',err);
+    toast('❌ Error: '+(err.message||'no se pudo asignar'));
+  } finally {
+    if(btnConfirm){ btnConfirm.textContent='Asignar ✓'; btnConfirm.style.opacity='1'; }
+  }
 }
 
 
