@@ -1248,7 +1248,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 
 
     <!-- VISTA EMPLEADO (solo visible para rol=empleado) -->
-    <div id="pg-empleado" class="page" style="display:none">
+    <div id="pg-empleado" class="page">
       <div style="padding:14px 16px 6px;font-size:15px;font-weight:800;color:var(--text)">
         📋 Mis trabajos de hoy
       </div>
@@ -1257,11 +1257,12 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
     </div>
 
     <!-- PANEL ADMIN USUARIOS -->
-    <div id="pg-usuarios" class="page" style="display:none">
+    <div id="pg-usuarios" class="page">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
-        <div style="font-size:16px;font-weight:800;color:var(--text)">👥 Usuarios</div>
-        <div class="bconfirm" style="padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer" onclick="openModal('new-user')">+ Nuevo</div>
+        <div style="font-size:16px;font-weight:800;color:var(--text)">👥 Equipo</div>
+        <div class="bconfirm" style="padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer" onclick="openNewUserModal()">+ Nuevo usuario</div>
       </div>
+      <div style="font-size:11px;color:var(--text3);padding:0 16px 12px">Tocá un usuario para editar su PIN o rol</div>
       <div id="usuarios-list"></div>
     </div>
 
@@ -2969,6 +2970,8 @@ window.addEventListener('popstate', function(e){
     if(prev==='finanzas') renderFinanzas();
     if(prev==='notas')    renderNotas();
     if(prev==='agenda')   renderCalendar();
+    if(prev==='usuarios') loadUsuarios();
+    if(prev==='empleado') renderEmpleadoView();
     try{ localStorage.setItem('cp_page_v1', prev); }catch(e){}
   } else {
     // Estamos en la raíz — pushear estado para evitar cierre
@@ -4123,7 +4126,15 @@ function addUsuariosTab(){
   if(!bnav||document.getElementById('bni-usuarios'))return;
   const tab=document.createElement('div');
   tab.className='bni'; tab.id='bni-usuarios';
-  tab.onclick=()=>{ showPage('usuarios',tab); loadUsuarios(); };
+  tab.onclick=()=>{
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+    document.getElementById('pg-usuarios').classList.add('on');
+    document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
+    tab.classList.add('on');
+    try{ history.pushState({page:'usuarios'},'','#usuarios'); }catch(e){}
+    try{ localStorage.setItem('cp_page_v1','usuarios'); }catch(e){}
+    loadUsuarios();
+  };
   tab.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Equipo';
   bnav.appendChild(tab);
 }
@@ -4328,6 +4339,16 @@ async function loadUsuarios(){
   }catch(e){el.innerHTML='<div class="nodata">Error al cargar</div>';}
 }
 
+function openNewUserModal(){
+  document.getElementById('nu-title').textContent='Nuevo usuario';
+  document.getElementById('nu-nombre').value='';
+  document.getElementById('nu-pin').value='';
+  document.getElementById('nu-rol').value='empleado';
+  document.getElementById('nu-edit-id').value='';
+  document.getElementById('nu-delete-wrap').style.display='none';
+  openModal('new-user');
+}
+
 function editUser(id,nombre,rol){
   document.getElementById('nu-title').textContent='Editar usuario';
   document.getElementById('nu-nombre').value=nombre;
@@ -4465,7 +4486,7 @@ async function saveAsignacion(){
   // Restaurar página activa + History API base state
   try{
     const savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
-    const validPages = ['dashboard','mapa','clientes','ruta','finanzas','notas','agenda'];
+    const validPages = ['dashboard','mapa','clientes','ruta','finanzas','notas','agenda','usuarios','empleado'];
     const page = validPages.includes(savedPage) ? savedPage : 'dashboard';
     history.replaceState({page:'dashboard'}, '', '#dashboard');
     if(page !== 'dashboard'){
