@@ -1631,25 +1631,9 @@ function seedDay(key, entries){
   if(!schedule[key] || schedule[key].length===0) schedule[key]=entries;
 }
 
-seedDay(TODAY_KEY,[
-  {clientId:findOrCreateClient('Alamino','Pocito','Mant. semanal',25000,'Pocito · Calle 14'),time:'08:00',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Siry','Rawson','Mant. semanal',25000,'Rawson · Villa Elisa'),time:'09:30',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Walter Medano','Rawson','Mant. semanal',30000,'Rawson · El Médano'),time:'11:00',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Laura Calle 11','Capital','Limpieza profunda',80000,'Capital · Calle 11'),time:'13:30',notes:'Llevar pastillas extra de cloro',status:'now'},
-  {clientId:findOrCreateClient('Disanti','Rawson','Mant. semanal',25000,'Rawson · La Porfiada'),time:'16:00',notes:'',status:'pend'},
-  {clientId:findOrCreateClient('Walter Pasten','Rawson','Mant. semanal',15000,'Rawson · zona sur'),time:'17:00',notes:'Perro suelto, tocar bocina',status:'pend'},
-]);
-// demo: a couple more days for the calendar
-seedDay(dkey(addDays(_now,1)),[
-  {clientId:findOrCreateClient('Vivíana Almiron','Rivadavia','Mant. semanal',20000,'#Chacabuco entre 8 y 9'),time:'15:30',notes:'',status:'pend'},
-  {clientId:findOrCreateClient('Marcelo Mena','Rawson','Mant. semanal',20000,'Rawson'),time:'14:00',notes:'',status:'pend'},
-]);
-seedDay(dkey(addDays(_now,2)),[
-  {clientId:findOrCreateClient('Silvia y Daniel salguero','Capital','Limpieza profunda',80000,'Atrás de Makro'),time:'14:00',notes:'',status:'pend'},
-]);
-seedDay(dkey(addDays(_now,-1)),[
-  {clientId:findOrCreateClient('Milagros alvarez','Capital','Mant. semanal',25000,'Pileta Milagros · CF6P+VMF Villa'),time:'15:30',notes:'',status:'done'},
-]);
+// Sin datos de ejemplo precargados: el schedule arranca vacío y se completa
+// exclusivamente con lo que traiga Supabase (syncTrabajosDelDia) o lo que
+// cargue el usuario manualmente. seedDay() queda disponible pero sin uso.
 let habits=[
   {icon:'🏋️',name:'Gimnasio',streak:12,done:false},
   {icon:'📱',name:'Redes Clean Pools',streak:5,done:false},
@@ -2926,6 +2910,12 @@ function saveFin(){
 let _navHistory = ['dashboard']; // stack de páginas visitadas
 
 function showPage(id, tab){
+  // Blindaje: solo 'admin' puede entrar a la gestión de usuarios,
+  // sin importar cómo se intente llegar (nav, historial, localStorage, consola)
+  if(id==='usuarios' && currentUser?.rol!=='admin'){
+    toast('⚠ Acceso restringido a administradores');
+    id='dashboard';
+  }
   // Guardar en stack de navegación interno
   if(_navHistory[_navHistory.length-1] !== id){
     _navHistory.push(id);
@@ -2959,7 +2949,8 @@ window.addEventListener('popstate', function(e){
   // Remover la página actual del stack
   if(_navHistory.length > 1){
     _navHistory.pop();
-    const prev = _navHistory[_navHistory.length-1];
+    let prev = _navHistory[_navHistory.length-1];
+    if(prev==='usuarios' && currentUser?.rol!=='admin') prev='dashboard';
     // Navegar a la página anterior sin pushear al history (ya lo hizo popstate)
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     const pg = document.getElementById('pg-'+prev);
@@ -4326,7 +4317,19 @@ function exportAgendaWhatsApp(){
   }
 }
 
+// Blindaje de permisos: solo 'admin' gestiona usuarios (crear/editar/borrar).
+// Se llama al inicio de cada acción sobre usuarios, sin importar desde dónde
+// se dispare (UI, historial del navegador, o consola).
+function requireAdmin(){
+  if(currentUser?.rol!=='admin'){
+    toast('⚠ Solo un administrador puede gestionar usuarios');
+    return false;
+  }
+  return true;
+}
+
 async function loadUsuarios(){
+  if(!requireAdmin())return;
   const el=document.getElementById('usuarios-list'); if(!el)return;
   el.innerHTML='<div class="nodata">Cargando...</div>';
   try{
@@ -4340,6 +4343,7 @@ async function loadUsuarios(){
 }
 
 function openNewUserModal(){
+  if(!requireAdmin())return;
   document.getElementById('nu-title').textContent='Nuevo usuario';
   document.getElementById('nu-nombre').value='';
   document.getElementById('nu-pin').value='';
@@ -4350,6 +4354,7 @@ function openNewUserModal(){
 }
 
 function editUser(id,nombre,rol){
+  if(!requireAdmin())return;
   document.getElementById('nu-title').textContent='Editar usuario';
   document.getElementById('nu-nombre').value=nombre;
   document.getElementById('nu-pin').value='';
@@ -4360,6 +4365,7 @@ function editUser(id,nombre,rol){
 }
 
 async function saveUser(){
+  if(!requireAdmin())return;
   const nombre=document.getElementById('nu-nombre').value.trim();
   const pin=document.getElementById('nu-pin').value.trim();
   const rol=document.getElementById('nu-rol').value;
@@ -4377,6 +4383,7 @@ async function saveUser(){
 }
 
 async function deleteUser(){
+  if(!requireAdmin())return;
   const id=document.getElementById('nu-edit-id').value; if(!id)return;
   if(!confirm('¿Desactivar este usuario?'))return;
   await sb.from('users').update({activo:false}).eq('id',id);
@@ -4485,7 +4492,8 @@ async function saveAsignacion(){
 
   // Restaurar página activa + History API base state
   try{
-    const savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
+    let savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
+    if(savedPage==='usuarios' && currentUser?.rol!=='admin') savedPage='dashboard';
     const validPages = ['dashboard','mapa','clientes','ruta','finanzas','notas','agenda','usuarios','empleado'];
     const page = validPages.includes(savedPage) ? savedPage : 'dashboard';
     history.replaceState({page:'dashboard'}, '', '#dashboard');
