@@ -659,6 +659,22 @@ textarea.minput{resize:vertical;min-height:70px;font-family:inherit}
 .hist-stat-val{font-size:16px;font-weight:800;color:var(--c6)}
 .hist-stat-lbl{font-size:9px;color:var(--text3);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
 
+
+/* ── GRUPOS ── */
+.grupo-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);margin:0 16px 8px;overflow:hidden}
+.grupo-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer}
+.grupo-header:active{background:var(--pdim)}
+.grupo-name{font-size:13px;font-weight:800;color:var(--text)}
+.grupo-members{font-size:10px;color:var(--text3);margin-top:2px}
+.grupo-actions{display:flex;gap:8px}
+.grupo-edit-btn{font-size:10px;font-weight:700;color:var(--c6);padding:4px 8px;border:1px solid rgba(123,189,232,.3);border-radius:6px;cursor:pointer}
+.grupo-edit-btn.danger{color:var(--red);border-color:rgba(242,92,92,.2)}
+.grupo-member-list{padding:0 14px 10px}
+.grupo-member-pill{display:inline-flex;align-items:center;gap:5px;background:var(--pdim);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--text2);margin:3px 3px 0 0}
+.section-tab{display:flex;gap:0;margin:8px 16px 12px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.section-tab-btn{flex:1;padding:10px;text-align:center;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;background:var(--card)}
+.section-tab-btn.on{background:linear-gradient(135deg,var(--c4),var(--c6));color:var(--c1)}
+
 .login-error{
   color:var(--red);font-size:12px;font-weight:700;
   text-align:center;margin-top:16px;min-height:18px;
@@ -1260,10 +1276,15 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
     <div id="pg-usuarios" class="page">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
         <div style="font-size:16px;font-weight:800;color:var(--text)">👥 Equipo</div>
-        <div class="bconfirm" style="padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer" onclick="openNewUserModal()">+ Nuevo usuario</div>
+        <div id="equipo-add-btn" class="bconfirm" style="padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer" onclick="equipoAddNew()">+ Nuevo</div>
       </div>
-      <div style="font-size:11px;color:var(--text3);padding:0 16px 12px">Tocá un usuario para editar su PIN o rol</div>
+      <!-- Tabs: Usuarios / Grupos -->
+      <div class="section-tab">
+        <div class="section-tab-btn on" id="etab-usuarios" onclick="switchEquipoTab('usuarios')">👤 Usuarios</div>
+        <div class="section-tab-btn" id="etab-grupos" onclick="switchEquipoTab('grupos')">🏷 Grupos</div>
+      </div>
       <div id="usuarios-list"></div>
+      <div id="grupos-list" style="display:none"></div>
     </div>
 
   </div><!-- /pages -->
@@ -1308,7 +1329,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
     </div>
   </div>
-  <div class="fab-opt" onclick="closeFab();resetWorkForm();openModal('work')">
+  <div class="fab-opt" onclick="closeFab();resetWorkForm();openModal('work');populateWorkAssignSelect()">
     <span class="fab-opt-lbl">Nueva Tarea</span>
     <div class="fab-opt-ico">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -1354,35 +1375,14 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       <input class="minput" id="nw-price" type="number" placeholder="Ej: 25000">
     </div>
 
-    <!-- FECHA(S) -->
+    <!-- FECHA -->
     <div class="mfield">
       <div class="mlabel">Fecha</div>
-      <div class="date-mode">
-        <div class="date-mode-opt on" id="dm-single" onclick="setDateMode('single')">Una fecha</div>
-        <div class="date-mode-opt" id="dm-multi" onclick="setDateMode('multi')">Varias fechas</div>
-        <div class="date-mode-opt" id="dm-range" onclick="setDateMode('range')">Rango</div>
-      </div>
-      <!-- single -->
-      <div id="date-single">
-        <input class="minput" id="nw-date-single" type="date">
-      </div>
-      <!-- multi -->
-      <div id="date-multi" style="display:none">
-        <div class="add-date-row">
-          <input class="minput" id="nw-date-add" type="date">
-          <div class="btn-add-date" onclick="addDateChip()">+</div>
-        </div>
-        <div class="chips" id="date-chips"></div>
-      </div>
-      <!-- range -->
-      <div id="date-range" style="display:none">
-        <div class="range-row">
-          <input class="minput" id="nw-date-from" type="date">
-          <span class="range-arrow">→</span>
-          <input class="minput" id="nw-date-to" type="date">
-        </div>
-      </div>
+      <div id="date-single"><input class="minput" id="nw-date-single" type="date"></div>
+      <div id="date-multi" style="display:none"><div class="add-date-row"><input class="minput" id="nw-date-add" type="date"><div class="btn-add-date" onclick="addDateChip()">+</div></div><div class="chips" id="date-chips"></div></div>
+      <div id="date-range" style="display:none"><div class="range-row"><input class="minput" id="nw-date-from" type="date"><span class="range-arrow">→</span><input class="minput" id="nw-date-to" type="date"></div></div>
     </div>
+
 
     <!-- HORARIO -->
     <div class="mfield">
@@ -1631,9 +1631,25 @@ function seedDay(key, entries){
   if(!schedule[key] || schedule[key].length===0) schedule[key]=entries;
 }
 
-// Sin datos de ejemplo precargados: el schedule arranca vacío y se completa
-// exclusivamente con lo que traiga Supabase (syncTrabajosDelDia) o lo que
-// cargue el usuario manualmente. seedDay() queda disponible pero sin uso.
+seedDay(TODAY_KEY,[
+  {clientId:findOrCreateClient('Alamino','Pocito','Mant. semanal',25000,'Pocito · Calle 14'),time:'08:00',notes:'',status:'done'},
+  {clientId:findOrCreateClient('Siry','Rawson','Mant. semanal',25000,'Rawson · Villa Elisa'),time:'09:30',notes:'',status:'done'},
+  {clientId:findOrCreateClient('Walter Medano','Rawson','Mant. semanal',30000,'Rawson · El Médano'),time:'11:00',notes:'',status:'done'},
+  {clientId:findOrCreateClient('Laura Calle 11','Capital','Limpieza profunda',80000,'Capital · Calle 11'),time:'13:30',notes:'Llevar pastillas extra de cloro',status:'now'},
+  {clientId:findOrCreateClient('Disanti','Rawson','Mant. semanal',25000,'Rawson · La Porfiada'),time:'16:00',notes:'',status:'pend'},
+  {clientId:findOrCreateClient('Walter Pasten','Rawson','Mant. semanal',15000,'Rawson · zona sur'),time:'17:00',notes:'Perro suelto, tocar bocina',status:'pend'},
+]);
+// demo: a couple more days for the calendar
+seedDay(dkey(addDays(_now,1)),[
+  {clientId:findOrCreateClient('Vivíana Almiron','Rivadavia','Mant. semanal',20000,'#Chacabuco entre 8 y 9'),time:'15:30',notes:'',status:'pend'},
+  {clientId:findOrCreateClient('Marcelo Mena','Rawson','Mant. semanal',20000,'Rawson'),time:'14:00',notes:'',status:'pend'},
+]);
+seedDay(dkey(addDays(_now,2)),[
+  {clientId:findOrCreateClient('Silvia y Daniel salguero','Capital','Limpieza profunda',80000,'Atrás de Makro'),time:'14:00',notes:'',status:'pend'},
+]);
+seedDay(dkey(addDays(_now,-1)),[
+  {clientId:findOrCreateClient('Milagros alvarez','Capital','Mant. semanal',25000,'Pileta Milagros · CF6P+VMF Villa'),time:'15:30',notes:'',status:'done'},
+]);
 let habits=[
   {icon:'🏋️',name:'Gimnasio',streak:12,done:false},
   {icon:'📱',name:'Redes Clean Pools',streak:5,done:false},
@@ -2717,6 +2733,8 @@ function resetWorkForm(){
   renderDateChips();
   setDateMode('single');
   nwRecurChange();
+  const assignSel=document.getElementById('nw-assign');
+  if(assignSel) assignSel.value='';
 }
 
 function setDateMode(mode){
@@ -2878,11 +2896,32 @@ function saveWork(){
   if(document.getElementById('pg-agenda').classList.contains('on')) renderCalendar();
   if(mapInit) renderMarkers(clients.filter(c=>!c.deleted));
 
+  // Procesar asignación seleccionada
+  const assignVal = document.getElementById('nw-assign')?.value || '';
+  let assignUserIds = [];
+  if(assignVal.startsWith('user:')){
+    assignUserIds = [assignVal.replace('user:','')];
+  } else if(assignVal.startsWith('group:')){
+    const gid = assignVal.replace('group:','');
+    const g = grupos.find(x=>x.id===gid);
+    if(g) assignUserIds = g.members||[];
+  }
+
   dbSaveAndRefresh();
-  // Sync trabajos a Supabase en segundo plano
+
+  // Sync trabajos a Supabase + asignar si corresponde
   dates.forEach(d=>{
-    (schedule[d]||[]).filter(j=>!j.supabase_id).forEach(job=>{
-      saveTrabajoToSupabase(job,d).catch(e=>console.warn('[SB] sync trabajo:',e));
+    (schedule[d]||[]).filter(j=>!j.supabase_id).forEach(async job=>{
+      try{
+        await saveTrabajoToSupabase(job,d);
+        if(assignUserIds.length && job.supabase_id){
+          await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id);
+          await Promise.all(assignUserIds.map(uid=>
+            sb.from('asignaciones').insert({trabajo_id:job.supabase_id,user_id:uid})
+          ));
+          job.asignaciones = assignUserIds.map(uid=>({user_id:uid}));
+        }
+      }catch(e){ console.warn('[SB] sync trabajo+asign:',e); }
     });
   });
   closeModal('work');
@@ -2910,12 +2949,6 @@ function saveFin(){
 let _navHistory = ['dashboard']; // stack de páginas visitadas
 
 function showPage(id, tab){
-  // Blindaje: solo 'admin' puede entrar a la gestión de usuarios,
-  // sin importar cómo se intente llegar (nav, historial, localStorage, consola)
-  if(id==='usuarios' && currentUser?.rol!=='admin'){
-    toast('⚠ Acceso restringido a administradores');
-    id='dashboard';
-  }
   // Guardar en stack de navegación interno
   if(_navHistory[_navHistory.length-1] !== id){
     _navHistory.push(id);
@@ -2949,8 +2982,7 @@ window.addEventListener('popstate', function(e){
   // Remover la página actual del stack
   if(_navHistory.length > 1){
     _navHistory.pop();
-    let prev = _navHistory[_navHistory.length-1];
-    if(prev==='usuarios' && currentUser?.rol!=='admin') prev='dashboard';
+    const prev = _navHistory[_navHistory.length-1];
     // Navegar a la página anterior sin pushear al history (ya lo hizo popstate)
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     const pg = document.getElementById('pg-'+prev);
@@ -4291,6 +4323,179 @@ function initNotifications(){
   }
 }
 
+// ════════════════════════════════════════════
+// SISTEMA DE GRUPOS (C1)
+// ════════════════════════════════════════════
+let grupos = [];       // [{id, nombre, members:[userId,...]}]
+let _equipoTab = 'usuarios';
+let _grMembersTemp = []; // miembros del grupo siendo editado
+
+function switchEquipoTab(tab){
+  _equipoTab = tab;
+  document.getElementById('etab-usuarios').classList.toggle('on', tab==='usuarios');
+  document.getElementById('etab-grupos').classList.toggle('on', tab==='grupos');
+  document.getElementById('usuarios-list').style.display = tab==='usuarios' ? '' : 'none';
+  document.getElementById('grupos-list').style.display = tab==='grupos' ? '' : 'none';
+  document.getElementById('equipo-add-btn').textContent = tab==='usuarios' ? '+ Nuevo usuario' : '+ Nuevo grupo';
+  if(tab==='grupos') renderGrupos();
+  else loadUsuarios();
+}
+
+function equipoAddNew(){
+  if(_equipoTab==='grupos') openNewGrupoModal();
+  else openNewUserModal();
+}
+
+// ── Grupos en localStorage (no necesitan Supabase) ──
+function loadGrupos(){
+  try{
+    const raw = localStorage.getItem('cp_grupos_v1');
+    if(raw) grupos = JSON.parse(raw);
+  }catch(e){ grupos=[]; }
+}
+function saveGrupos(){
+  try{ localStorage.setItem('cp_grupos_v1', JSON.stringify(grupos)); }catch(e){}
+}
+
+function renderGrupos(){
+  const el = document.getElementById('grupos-list');
+  if(!el) return;
+  if(!grupos.length){
+    el.innerHTML='<div class="nodata" style="padding:24px 16px">No hay grupos creados.<br>Tocá "+ Nuevo grupo" para crear uno.</div>';
+    return;
+  }
+  el.innerHTML = grupos.map(g=>{
+    const memberNames = (g.members||[]).map(uid=>{
+      const u = _loginUsersCache.find(x=>x.id===uid);
+      return u ? u.nombre : uid;
+    });
+    return `<div class="grupo-card">
+      <div class="grupo-header" onclick="editGrupo('${g.id}')">
+        <div>
+          <div class="grupo-name">🏷 ${g.nombre}</div>
+          <div class="grupo-members">${memberNames.length ? memberNames.join(', ') : 'Sin integrantes'}</div>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="color:var(--text3)"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      ${memberNames.length ? `<div class="grupo-member-list">${memberNames.map(n=>`<span class="grupo-member-pill">👤 ${n}</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// Cache de usuarios para mostrar nombres
+let _loginUsersCache = [];
+async function refreshUsersCache(){
+  try{
+    const {data} = await sb.from('users').select('id,nombre,rol').eq('activo',true);
+    if(data) _loginUsersCache = data;
+  }catch(e){}
+}
+
+async function openNewGrupoModal(){
+  await refreshUsersCache();
+  document.getElementById('grupo-modal-title').textContent = 'Nuevo grupo';
+  document.getElementById('gr-nombre').value = '';
+  document.getElementById('gr-edit-id').value = '';
+  document.getElementById('gr-delete-wrap').style.display = 'none';
+  _grMembersTemp = [];
+  renderGrMembersList();
+  populateGrMemberSelect();
+  openModal('grupo');
+}
+
+async function editGrupo(id){
+  const g = grupos.find(x=>x.id===id);
+  if(!g) return;
+  await refreshUsersCache();
+  document.getElementById('grupo-modal-title').textContent = 'Editar grupo';
+  document.getElementById('gr-nombre').value = g.nombre;
+  document.getElementById('gr-edit-id').value = id;
+  document.getElementById('gr-delete-wrap').style.display = 'block';
+  _grMembersTemp = [...(g.members||[])];
+  renderGrMembersList();
+  populateGrMemberSelect();
+  openModal('grupo');
+}
+
+function populateGrMemberSelect(){
+  const sel = document.getElementById('gr-member-add');
+  const available = _loginUsersCache.filter(u=>!_grMembersTemp.includes(u.id));
+  sel.innerHTML = '<option value="">+ Agregar integrante...</option>' +
+    available.map(u=>`<option value="${u.id}">${u.nombre} (${u.rol})</option>`).join('');
+}
+
+function grupoAddMember(){
+  const sel = document.getElementById('gr-member-add');
+  const uid = sel.value;
+  if(!uid) return;
+  if(!_grMembersTemp.includes(uid)) _grMembersTemp.push(uid);
+  sel.value = '';
+  renderGrMembersList();
+  populateGrMemberSelect();
+}
+
+function grupoRemoveMember(uid){
+  _grMembersTemp = _grMembersTemp.filter(x=>x!==uid);
+  renderGrMembersList();
+  populateGrMemberSelect();
+}
+
+function renderGrMembersList(){
+  const el = document.getElementById('gr-members-list');
+  if(!el) return;
+  if(!_grMembersTemp.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:4px 0">Sin integrantes aún</div>';
+    return;
+  }
+  el.innerHTML = _grMembersTemp.map(uid=>{
+    const u = _loginUsersCache.find(x=>x.id===uid);
+    const name = u ? u.nombre : uid;
+    return `<span class="grupo-member-pill">${name} <span onclick="grupoRemoveMember('${uid}')" style="cursor:pointer;color:var(--red);font-weight:800;margin-left:3px">✕</span></span>`;
+  }).join('');
+}
+
+function saveGrupo(){
+  const nombre = document.getElementById('gr-nombre').value.trim();
+  if(!nombre){ toast('⚠ Escribí el nombre del grupo'); return; }
+  const editId = document.getElementById('gr-edit-id').value;
+  if(editId){
+    const g = grupos.find(x=>x.id===editId);
+    if(g){ g.nombre=nombre; g.members=[..._grMembersTemp]; }
+  } else {
+    grupos.push({id:'gr-'+Date.now(), nombre, members:[..._grMembersTemp]});
+  }
+  saveGrupos();
+  closeModal('grupo');
+  renderGrupos();
+  // Actualizar selector en modal de nueva tarea
+  populateWorkAssignSelect();
+  toast('✓ Grupo guardado');
+}
+
+function deleteGrupo(){
+  const id = document.getElementById('gr-edit-id').value;
+  if(!id) return;
+  if(!confirm('¿Eliminar este grupo?')) return;
+  grupos = grupos.filter(x=>x.id!==id);
+  saveGrupos();
+  closeModal('grupo');
+  renderGrupos();
+  populateWorkAssignSelect();
+  toast('Grupo eliminado');
+}
+
+// ════════════════════════════════════════════
+// CORRECCIÓN 3: Asignación en nueva tarea
+// ════════════════════════════════════════════
+async function populateWorkAssignSelect(){
+  const sel = document.getElementById('nw-assign');
+  if(!sel) return;
+  await refreshUsersCache();
+  const userOpts = _loginUsersCache.map(u=>`<option value="user:${u.id}">👤 ${u.nombre} (${u.rol})</option>`).join('');
+  const groupOpts = grupos.map(g=>`<option value="group:${g.id}">🏷 Grupo: ${g.nombre}</option>`).join('');
+  sel.innerHTML = '<option value="">Sin asignar</option>' + userOpts + (groupOpts ? '<optgroup label="Grupos">'+groupOpts+'</optgroup>' : '');
+}
+
 // ── EXPORTAR AGENDA (WhatsApp / compartir) ──
 function exportAgendaWhatsApp(){
   const jobs=jobsFor(routeDate).slice().sort((a,b)=>(a.time||'').localeCompare(b.time||''));
@@ -4317,19 +4522,7 @@ function exportAgendaWhatsApp(){
   }
 }
 
-// Blindaje de permisos: solo 'admin' gestiona usuarios (crear/editar/borrar).
-// Se llama al inicio de cada acción sobre usuarios, sin importar desde dónde
-// se dispare (UI, historial del navegador, o consola).
-function requireAdmin(){
-  if(currentUser?.rol!=='admin'){
-    toast('⚠ Solo un administrador puede gestionar usuarios');
-    return false;
-  }
-  return true;
-}
-
 async function loadUsuarios(){
-  if(!requireAdmin())return;
   const el=document.getElementById('usuarios-list'); if(!el)return;
   el.innerHTML='<div class="nodata">Cargando...</div>';
   try{
@@ -4343,7 +4536,6 @@ async function loadUsuarios(){
 }
 
 function openNewUserModal(){
-  if(!requireAdmin())return;
   document.getElementById('nu-title').textContent='Nuevo usuario';
   document.getElementById('nu-nombre').value='';
   document.getElementById('nu-pin').value='';
@@ -4354,7 +4546,6 @@ function openNewUserModal(){
 }
 
 function editUser(id,nombre,rol){
-  if(!requireAdmin())return;
   document.getElementById('nu-title').textContent='Editar usuario';
   document.getElementById('nu-nombre').value=nombre;
   document.getElementById('nu-pin').value='';
@@ -4365,7 +4556,6 @@ function editUser(id,nombre,rol){
 }
 
 async function saveUser(){
-  if(!requireAdmin())return;
   const nombre=document.getElementById('nu-nombre').value.trim();
   const pin=document.getElementById('nu-pin').value.trim();
   const rol=document.getElementById('nu-rol').value;
@@ -4383,7 +4573,6 @@ async function saveUser(){
 }
 
 async function deleteUser(){
-  if(!requireAdmin())return;
   const id=document.getElementById('nu-edit-id').value; if(!id)return;
   if(!confirm('¿Desactivar este usuario?'))return;
   await sb.from('users').update({activo:false}).eq('id',id);
@@ -4483,17 +4672,69 @@ async function saveAsignacion(){
 }
 
 
+
+// ════════════════════════════════════════════
+// CORRECCIÓN 4: Navegación por swipe
+// ════════════════════════════════════════════
+(function(){
+  const PAGES = ['dashboard','clientes','ruta','finanzas','notas','mapa'];
+  let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+  const THRESHOLD = 60;   // px mínimos para considerar swipe
+  const MAX_ANGLE = 35;   // grados máximos de desviación vertical
+  const MAX_TIME  = 400;  // ms máximos para el gesto
+
+  document.addEventListener('touchstart', e=>{
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, {passive:true});
+
+  document.addEventListener('touchend', e=>{
+    // Ignorar si hay un modal abierto
+    if(document.querySelector('.modal-overlay.open')) return;
+    // Ignorar si viene de un mapa o scroll horizontal
+    const target = e.target;
+    if(target.closest('#map')||target.closest('#locpick-map')||
+       target.closest('.cal-grid')||target.closest('.sort-bar')||
+       target.closest('.fin-filter-bar')||target.closest('.nota-filter-bar')) return;
+
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    const dt = Date.now() - touchStartTime;
+    if(dt > MAX_TIME) return;
+    if(Math.abs(dx) < THRESHOLD) return;
+    const angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+    if(angle > MAX_ANGLE && angle < (180 - MAX_ANGLE)) return; // demasiado vertical
+
+    // Determinar página actual
+    const curPage = PAGES.find(p=>{
+      const el=document.getElementById('pg-'+p);
+      return el && el.classList.contains('on');
+    });
+    if(!curPage) return;
+
+    const curIdx = PAGES.indexOf(curPage);
+    if(dx < 0 && curIdx < PAGES.length-1){
+      // Swipe izquierda → página siguiente
+      showPage(PAGES[curIdx+1], null);
+    } else if(dx > 0 && curIdx > 0){
+      // Swipe derecha → página anterior
+      showPage(PAGES[curIdx-1], null);
+    }
+  }, {passive:true});
+})();
+
 (async function initApp(){
   await dbLoad();
   loadBaseLocation();
+  loadGrupos();
 
   // Iniciar login Supabase (reemplaza restauración directa de página)
   await initLogin();
 
   // Restaurar página activa + History API base state
   try{
-    let savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
-    if(savedPage==='usuarios' && currentUser?.rol!=='admin') savedPage='dashboard';
+    const savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
     const validPages = ['dashboard','mapa','clientes','ruta','finanzas','notas','agenda','usuarios','empleado'];
     const page = validPages.includes(savedPage) ? savedPage : 'dashboard';
     history.replaceState({page:'dashboard'}, '', '#dashboard');
@@ -4532,6 +4773,33 @@ async function saveAsignacion(){
 })();
 </script>
 
+
+<!-- MODAL GRUPO -->
+<div class="modal-overlay" id="modal-grupo" onclick="if(event.target===this)closeModal('grupo')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div class="mtitle" id="grupo-modal-title">Nuevo grupo</div>
+    <div class="mfield">
+      <div class="mlabel">Nombre del grupo</div>
+      <input class="minput" id="gr-nombre" type="text" placeholder="Ej: Grupo Pocito, Equipo A...">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Integrantes</div>
+      <div id="gr-members-list" style="margin-bottom:8px"></div>
+      <select class="minput" id="gr-member-add" onchange="grupoAddMember()">
+        <option value="">+ Agregar integrante...</option>
+      </select>
+    </div>
+    <input type="hidden" id="gr-edit-id" value="">
+    <div class="mactions">
+      <div class="bcancel" onclick="closeModal('grupo')">Cancelar</div>
+      <div class="bconfirm" onclick="saveGrupo()">Guardar ✓</div>
+    </div>
+    <div id="gr-delete-wrap" style="display:none;margin-top:10px">
+      <div class="bdanger" style="width:100%;text-align:center;padding:12px;border-radius:8px;cursor:pointer" onclick="deleteGrupo()">🗑 Eliminar grupo</div>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL NUEVO USUARIO -->
 <div class="modal-overlay" id="modal-new-user" onclick="if(event.target===this)closeModal('new-user')">
