@@ -1660,8 +1660,18 @@ const TODAY_KEY=dkey(_now);
 function addDays(base,n){const d=new Date(base);d.setDate(d.getDate()+n);return d;}
 const schedule={};
 function seedDay(key, entries){
-  // Only seed if this day has no entries yet (preserves restored localStorage data)
-  if(!schedule[key] || schedule[key].length===0) schedule[key]=entries;
+  // SOLO seed si: 1) el día está vacío, 2) NO hay datos guardados en localStorage
+  // Esto evita que los datos demo sobreescriban tareas reales del usuario
+  if(schedule[key] && schedule[key].length > 0) return;
+  // Si hay datos en localStorage, NO seeding (dbLoad los restaurará)
+  try{
+    const raw = localStorage.getItem('cp_schedule_v1');
+    if(raw){
+      const saved = JSON.parse(raw);
+      if(saved[key] && saved[key].length > 0) return; // ya hay datos reales
+    }
+  }catch(e){}
+  schedule[key] = entries;
 }
 
 seedDay(TODAY_KEY,[
@@ -2952,6 +2962,8 @@ function saveWork(){
   if(mapInit) renderMarkers(clients.filter(c=>!c.deleted));
 
   dbSaveAndRefresh();
+  // Escritura inmediata adicional para evitar pérdida si se cierra rápido
+  dbSaveNow();
 
   // Sync trabajos a Supabase + asignar si corresponde
   dates.forEach(d=>{
@@ -3736,13 +3748,14 @@ function idbGet(key){
   }));
 }
 
-// ── dbSave: persiste en IndexedDB con debounce de 400ms ──
-// (evita escrituras en ráfaga al hacer cambios rápidos)
+// ── dbSave: escribe localStorage INMEDIATAMENTE (sync) + IndexedDB con debounce ──
+// Así si el usuario cierra la app en menos de 400ms, localStorage ya tiene los datos
 function dbSave(){
+  // 1) Escritura INMEDIATA en localStorage (síncrona, no se pierde)
+  _dbWriteLocalStorage();
+  // 2) IndexedDB con debounce (async, más robusto a largo plazo)
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(_dbWriteNow, 400);
-  // También escribir en localStorage como backup inmediato
-  _dbWriteLocalStorage();
 }
 
 function _dbWriteLocalStorage(){
@@ -3828,9 +3841,14 @@ async function dbLoad(){
     });
   }
 
-  // 2) Restaurar schedule
+  // 2) Restaurar schedule — tiene prioridad sobre los seedDay demo
   if(data.schedule){
-    Object.keys(data.schedule).forEach(k => { schedule[k] = data.schedule[k]; });
+    Object.keys(data.schedule).forEach(k => {
+      // Siempre restaurar días guardados (sobreescribe demos del seedDay)
+      if(data.schedule[k] && data.schedule[k].length > 0){
+        schedule[k] = data.schedule[k];
+      }
+    });
   }
 
   // 3) Restaurar hábitos
