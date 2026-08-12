@@ -2914,7 +2914,7 @@ function saveWork(){
     });
   }
 
-  // BUG-03 FIX: usar zona real del cliente existente, no siempre 'Capital'
+  // BUG-03 FIX: usar zona real del cliente existente
   const existingCl = clients.find(x=>!x.deleted && x.n.toLowerCase()===name.toLowerCase());
   const realZone = existingCl ? existingCl.zone : (document.getElementById('nw-zone')?.value || 'Capital');
   const clientId = findOrCreateClient(name, realZone, svc, price, '');
@@ -2922,6 +2922,21 @@ function saveWork(){
   if(cl){ cl.service=svc; cl.price=price; }
 
   const recurrenceId = recurType!=='none' ? ('rec-'+Date.now()) : null;
+
+  // Procesar asignación ANTES de crear los jobs (variables necesarias abajo)
+  const assignVal = document.getElementById('nw-assign')?.value || '';
+  let assignUserIds = [];
+  let assignLabel = '';
+  if(assignVal.startsWith('user:')){
+    const uid = assignVal.replace('user:','');
+    assignUserIds = [uid];
+    const u = _loginUsersCache.find(x=>x.id===uid);
+    assignLabel = u ? '👤 '+u.nombre : '';
+  } else if(assignVal.startsWith('group:')){
+    const gid = assignVal.replace('group:','');
+    const g = grupos.find(x=>x.id===gid);
+    if(g){ assignUserIds = g.members||[]; assignLabel = '🏷 '+g.nombre; }
+  }
 
   dates.sort();
   dates.forEach(d=>{
@@ -2935,24 +2950,6 @@ function saveWork(){
   renderRoute();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderCalendar();
   if(mapInit) renderMarkers(clients.filter(c=>!c.deleted));
-
-  // Procesar asignación seleccionada
-  const assignVal = document.getElementById('nw-assign')?.value || '';
-  let assignUserIds = [];
-  let assignLabel = '';
-  if(assignVal.startsWith('user:')){
-    const uid = assignVal.replace('user:','');
-    assignUserIds = [uid];
-    const u = _loginUsersCache.find(x=>x.id===uid);
-    assignLabel = u ? '👤 '+u.nombre : '';
-  } else if(assignVal.startsWith('group:')){
-    const gid = assignVal.replace('group:','');
-    const g = grupos.find(x=>x.id===gid);
-    if(g){
-      assignUserIds = g.members||[];
-      assignLabel = '🏷 '+g.nombre;
-    }
-  }
 
   dbSaveAndRefresh();
 
