@@ -1021,14 +1021,14 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
           <div class="cal-nav" onclick="calShift(-1)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M15 18l-6-6 6-6"/></svg>
           </div>
-          <div class="cal-title" id="cal-title">—</div>
+          <div class="cal-title" id="dash-cal-title">—</div>
           <div class="cal-nav" onclick="calShift(1)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M9 18l6-6-6-6"/></svg>
           </div>
         </div>
-        <div class="cal-grid" id="cal-grid"></div>
-        <div class="agenda-date" id="agenda-date" style="padding:8px 16px 4px">—</div>
-        <div id="agenda-list"></div>
+        <div class="cal-grid" id="dash-cal-grid"></div>
+        <div class="agenda-date" id="dash-agenda-date" style="padding:8px 16px 4px">—</div>
+        <div id="dash-agenda-list"></div>
       </div>
 
       <div class="slabel">Oportunidades</div>
@@ -1419,6 +1419,9 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       <div class="mlabel">Notas adicionales</div>
       <textarea class="minput" id="nw-notes" rows="2" placeholder="Observaciones del trabajo..."></textarea>
     </div>
+
+    <!-- ZONA (hidden, usado para zona del cliente al crear) -->
+    <input type="hidden" id="nw-zone" value="Capital">
 
     <!-- RECURRENCIA -->
     <div class="mfield">
@@ -2558,7 +2561,10 @@ function renderCalendar(){
       ${cnt>0?'<span class="dot"></span>':''}
     </div>`;
   }
-  document.getElementById('cal-grid').innerHTML=html;
+  const gridEl=document.getElementById('cal-grid');
+  const dashGridEl=document.getElementById('dash-cal-grid');
+  if(gridEl) gridEl.innerHTML=html;
+  if(dashGridEl) dashGridEl.innerHTML=html;
   renderAgendaList(selectedDate);
 }
 function selectDay(key){
@@ -2572,10 +2578,22 @@ function fmtAgendaDate(key){
   return dows[dt.getDay()]+' '+d+' de '+MONTH_NAMES[m-1];
 }
 function renderAgendaList(key){
-  document.getElementById('agenda-date').textContent=fmtAgendaDate(key)+(key===TODAY_KEY?' · Hoy':'');
+  const dateTxt = fmtAgendaDate(key)+(key===TODAY_KEY?' · Hoy':'');
+  // Update both pg-agenda and dashboard inline calendar
+  const agDate = document.getElementById('agenda-date');
+  const dashAgDate = document.getElementById('dash-agenda-date');
+  if(agDate) agDate.textContent = dateTxt;
+  if(dashAgDate) dashAgDate.textContent = dateTxt;
+
   const jobs=jobsFor(key);
   const el=document.getElementById('agenda-list');
-  if(!jobs.length){el.innerHTML='<div class="agenda-empty">Sin trabajos programados este día</div>';return;}
+  const dashEl=document.getElementById('dash-agenda-list');
+  if(!jobs.length){
+    const emptyHtml='<div class="agenda-empty">Sin trabajos programados este día</div>';
+    if(el) el.innerHTML=emptyHtml;
+    if(dashEl) dashEl.innerHTML=emptyHtml;
+    return;
+  }
   // sort by time
   jobs.sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   el.innerHTML=jobs.map(j=>{
@@ -2607,6 +2625,8 @@ function renderAgendaList(key){
       </div>
     </div>`;
   }).join('');
+  // Sync dashboard inline calendar list
+  if(dashEl) dashEl.innerHTML = el.innerHTML;
 }
 
 // ── ACTION SHEET (job card quick actions) ──
@@ -2752,8 +2772,18 @@ function confirmYes(){
 
 
 // ── MODAL ──
-function openModal(id){document.getElementById('modal-'+id).classList.add('open');}
-function closeModal(id){document.getElementById('modal-'+id).classList.remove('open');}
+function openModal(id){
+  const el=document.getElementById('modal-'+id);
+  if(!el)return;
+  el.classList.add('open');
+  document.body.style.overflow='hidden';
+}
+function closeModal(id){
+  const el=document.getElementById('modal-'+id);
+  if(!el)return;
+  el.classList.remove('open');
+  document.body.style.overflow='';
+}
 // ── NEW JOB FORM ──
 let nwDateMode='single';
 let nwDateChips=[]; // for "multi" mode
@@ -3649,6 +3679,7 @@ function saveCliente(){
     return;
   }
   const svc = document.getElementById('nc-svc').value;
+  const zona = document.getElementById('nc-zona').value || 'Capital';
   const precio = parseInt(document.getElementById('nc-precio').value)||20000;
   const tel = document.getElementById('nc-tel').value.trim();
   const dir = document.getElementById('nc-dir').value.trim();
@@ -4456,18 +4487,32 @@ function renderEmpleadoView(){
   const dateEl=document.getElementById('empleado-date');
   if(dateEl)dateEl.textContent=now.getDate()+' de '+MONTHS[now.getMonth()]+' '+now.getFullYear();
   const jobs=jobsFor(TODAY_KEY);
-  if(!jobs.length){ el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text3)">No tenés trabajos asignados para hoy 🎉</div>'; return; }
-  el.innerHTML=jobs.map(j=>{
+  if(!jobs.length){
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text3)">No tenés trabajos asignados para hoy 🎉</div>';
+    return;
+  }
+  const rows = jobs.map(j=>{
     const cl=j.client;
     const stC=j.status==='done'?'st-done':j.status==='now'?'st-now':'st-pend';
     const stL=j.status==='done'?'Completado':j.status==='now'?'En curso':'Pendiente';
-    const addrHtml=cl.address?'<div class="emp-job-addr">📍 '+cl.address+'</div>':'';
-    const notesHtml=j.notes?'<div style="font-size:11px;color:var(--c5);margin-bottom:8px;font-style:italic">📝 '+j.notes+'</div>':'';
-    const navBtn=validCoord(cl.lat,cl.lng)?'<div class="emp-btn emp-btn-nav" onclick="goNavigate('+cl.lat+','+cl.lng+')">🧭 Navegar</div>':'';
-    const doneBtn='<div class="emp-btn emp-btn-done '+(j.status==='done'?'active':'')+'" onclick="empToggleDone(\''+TODAY_KEY+'\','+j.idx+')">'+(j.status==='done'?'✓ Listo':'Marcar listo')+'</div>';
-    return '<div class="emp-job-card '+(j.status==='done'?'done':'')+'"><span class="emp-job-status '+stC+'">'+stL+'</span><div class="emp-job-client">'+cl.n+'</div><div class="emp-job-svc">'+cl.service+(j.time?' · '+j.time:'')+'</div>'+addrHtml+notesHtml+'<div class="emp-job-actions">'+navBtn+doneBtn+'</div></div>';
-  }).join('');
+    let html='<div class="emp-job-card '+(j.status==='done'?'done':'')+'">';
+    html+='<span class="emp-job-status '+stC+'">'+stL+'</span>';
+    html+='<div class="emp-job-client">'+cl.n+'</div>';
+    html+='<div class="emp-job-svc">'+cl.service+(j.time?' · '+j.time:'')+'</div>';
+    if(cl.address) html+='<div class="emp-job-addr">📍 '+cl.address+'</div>';
+    if(j.notes) html+='<div style="font-size:11px;color:var(--c5);margin-bottom:8px;font-style:italic">📝 '+j.notes+'</div>';
+    if(j.assignLabel) html+='<div style="font-size:10px;color:var(--c6);margin-bottom:6px;font-weight:700">'+j.assignLabel+'</div>';
+    html+='<div class="emp-job-actions">';
+    if(validCoord(cl.lat,cl.lng)){
+      html+='<div class="emp-btn emp-btn-nav" onclick="goNavigate('+cl.lat+','+cl.lng+')">🧭 Navegar</div>';
+    }
+    html+='<div class="emp-btn emp-btn-done '+(j.status==='done'?'active':'')+'" onclick="empToggleDone(''+TODAY_KEY+'','+j.idx+')">'+(j.status==='done'?'✓ Listo':'Marcar listo')+'</div>';
+    html+='</div></div>';
+    return html;
+  });
+  el.innerHTML=rows.join('');
 }
+
 
 async function empToggleDone(dateKey,idx){
   const e=schedule[dateKey][idx]; e.status=e.status==='done'?'pend':'done';
