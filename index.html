@@ -4125,28 +4125,62 @@ let loginUsers  = [];
 let pinBuffer   = '';
 
 async function initLogin(){
+  // Verificar sesión guardada primero (rápido, desde localStorage)
   try{
     const saved = localStorage.getItem('cp_session');
     if(saved){
       const u = JSON.parse(saved);
-      const {data} = await sb.from('users').select('*').eq('id',u.id).eq('activo',true).single();
-      if(data){ currentUser=data; enterApp(); return; }
+      // Entrar con datos locales inmediatamente sin esperar Supabase
+      currentUser = u;
+      enterApp();
+      // Verificar en background que el usuario sigue activo
+      sb.from('users').select('*').eq('id',u.id).eq('activo',true).single()
+        .then(({data})=>{ if(!data){ localStorage.removeItem('cp_session'); location.reload(); } })
+        .catch(()=>{}); // sin conexión → mantener sesión local
+      return;
     }
   }catch(e){}
-  await loadLoginUsers();
+
+  // Sin sesión → mostrar login inmediatamente
   document.getElementById('login-screen').classList.remove('hidden');
+
+  // Cargar usuarios con timeout de 5 segundos
+  const sel = document.getElementById('login-user-select');
+  sel.innerHTML = '<option value="">⏳ Conectando...</option>';
+
+  try{
+    const timeoutPromise = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),5000));
+    const fetchPromise = sb.from('users').select('id,nombre,rol').eq('activo',true).order('nombre');
+    const {data,error} = await Promise.race([fetchPromise, timeoutPromise]);
+    if(error) throw error;
+    loginUsers = data||[];
+    sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>'+
+      loginUsers.map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+  }catch(e){
+    // Sin conexión o timeout → mostrar opción de ingreso offline
+    sel.innerHTML = '<option value="">⚠ Sin conexión — reintentá</option>';
+    document.getElementById('login-error').textContent = 'Sin conexión a internet. Verificá tu red y recargá la página.';
+    // Botón de reintentar
+    setTimeout(()=>{
+      if(!currentUser) loadLoginUsers();
+    }, 5000);
+  }
 }
 
 async function loadLoginUsers(){
+  const sel = document.getElementById('login-user-select');
+  if(sel) sel.innerHTML = '<option value="">⏳ Cargando...</option>';
   try{
     const {data,error} = await sb.from('users').select('id,nombre,rol').eq('activo',true).order('nombre');
     if(error) throw error;
     loginUsers = data||[];
-    const sel = document.getElementById('login-user-select');
-    sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>'+
+    if(sel) sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>'+
       loginUsers.map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+    const errEl=document.getElementById('login-error');
+    if(errEl) errEl.textContent='';
   }catch(e){
-    document.getElementById('login-user-select').innerHTML='<option>Error al cargar usuarios</option>';
+    if(sel) sel.innerHTML='<option value="">Error — tocá para reintentar</option>';
+    if(sel) sel.onclick=()=>loadLoginUsers();
   }
 }
 
@@ -4181,20 +4215,23 @@ async function attemptLogin(){
 
 function enterApp(){
   document.getElementById('login-screen').classList.add('hidden');
+
+  // currentUser puede venir de localStorage (solo id/nombre/rol) o de Supabase (completo)
   const badge=document.getElementById('user-badge');
   if(badge){
     badge.style.display='flex';
-    document.getElementById('user-badge-av').textContent=currentUser.nombre.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    document.getElementById('user-badge-name').textContent=currentUser.nombre.split(' ')[0];
-    document.getElementById('user-badge-rol').textContent=currentUser.rol;
+    const av=(currentUser.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('user-badge-av').textContent=av;
+    document.getElementById('user-badge-name').textContent=(currentUser.nombre||'').split(' ')[0];
+    document.getElementById('user-badge-rol').textContent=currentUser.rol||'';
   }
+
   applyRoleRestrictions();
   syncFromSupabase();
   subscribeRealtime();
   initNotifications();
-  // Migrar clientes base a Supabase si es admin y es la primera vez
   if(currentUser?.rol==='admin'){
-    setTimeout(()=>migrateBaseClientsToSupabase(), 2000);
+    setTimeout(()=>migrateBaseClientsToSupabase(), 3000);
   }
 }
 
