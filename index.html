@@ -61,9 +61,11 @@
 
 // ── PWA: Service Worker inline ──
 if('serviceWorker' in navigator){
-  const SW_VERSION = 'cp-v3';
+  // ⚠ Subir este número en cada deploy con cambios importantes.
+  // Fuerza a que TODOS los clientes descarten la caché vieja.
+  const SW_VERSION = 'cp-v5';
   const SW_CODE = `
-const CACHE = '${SW_VERSION = "cp-v3"}';
+const CACHE = '${SW_VERSION}';
 const SHELL = ['./'];
 
 self.addEventListener('install', e => {
@@ -92,7 +94,7 @@ self.addEventListener('fetch', e => {
   if(e.request.method !== 'GET') return;
 
   if(isCDN){
-    // CDN: cache-first con fallback a red
+    // CDN: cache-first con fallback a red (assets externos casi no cambian)
     e.respondWith(
       caches.match(e.request).then(cached => cached ||
         fetch(e.request).then(resp => {
@@ -106,9 +108,15 @@ self.addEventListener('fetch', e => {
   }
 
   if(isLocal){
-    // App shell: cache-first
+    // App shell: NETWORK-FIRST. Si hay internet, siempre trae la última
+    // versión (evita quedar pegado en una versión vieja con bugs ya
+    // corregidos). Si no hay conexión, usa la copia en caché.
     e.respondWith(
-      caches.match(e.request).then(cached => cached || fetch(e.request))
+      fetch(e.request).then(resp => {
+        const clone = resp.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return resp;
+      }).catch(() => caches.match(e.request))
     );
   }
 });
@@ -125,9 +133,32 @@ self.addEventListener('message', e => {
     .then(reg => {
       // Verificar actualizaciones cada 30 min
       setInterval(() => reg.update(), 30 * 60 * 1000);
+
+      // Si ya hay un SW esperando, activarlo ya (no esperar a cerrar la app)
+      if(reg.waiting) reg.waiting.postMessage('skipWaiting');
+
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener('statechange', () => {
+          if(nw.state === 'installed' && navigator.serviceWorker.controller){
+            nw.postMessage('skipWaiting');
+          }
+        });
+      });
+
       console.log('[SW] Registrado correctamente');
     })
     .catch(err => console.warn('[SW] Error:', err));
+
+  // Cuando el SW nuevo toma control, recargar UNA vez para mostrar
+  // siempre la versión más reciente sin intervención manual.
+  let _swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(_swRefreshing) return;
+    _swRefreshing = true;
+    location.reload();
+  });
 }
 </script>
 
@@ -3744,6 +3775,11 @@ let   _idb        = null;      // instancia abierta
 let   _saveTimer  = null;      // debounce para no saturar writes
 
 // Abrir/migrar la base IndexedDB
+// ⚠ IMPORTANTE: indexedDB.open() puede quedar COLGADO indefinidamente
+// (nunca resuelve ni falla) si otra pestaña/instancia vieja de la app
+// tiene la base abierta con una versión anterior (evento 'blocked').
+// Por eso esto SIEMPRE debe llamarse con un timeout desde afuera
+// (ver idbOpenSafe) para que la app nunca se quede trabada en el splash.
 function idbOpen(){
   return new Promise((resolve, reject) => {
     if(_idb){ resolve(_idb); return; }
@@ -3756,12 +3792,25 @@ function idbOpen(){
     };
     req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
     req.onerror   = e => { console.warn('[IDB] open error', e); reject(e); };
+    req.onblocked = e => {
+      console.warn('[IDB] open bloqueado por otra pestaña/instancia vieja');
+      // No reject aquí: dejamos que el timeout externo (idbOpenSafe) lo resuelva.
+    };
   });
+}
+
+// Envoltorio con timeout: si idbOpen() no resuelve en 3s (por bloqueo u
+// otro problema), seguimos sin IndexedDB en vez de trabar la app para siempre.
+function idbOpenSafe(ms = 3000){
+  return Promise.race([
+    idbOpen(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('IDB open timeout')), ms))
+  ]);
 }
 
 // Escribir un valor
 function idbSet(key, value){
-  return idbOpen().then(db => new Promise((resolve, reject) => {
+  return idbOpenSafe().then(db => new Promise((resolve, reject) => {
     const tx = db.transaction(IDB_STORE, 'readwrite');
     tx.objectStore(IDB_STORE).put(value, key);
     tx.oncomplete = resolve;
@@ -3771,7 +3820,7 @@ function idbSet(key, value){
 
 // Leer un valor
 function idbGet(key){
-  return idbOpen().then(db => new Promise((resolve, reject) => {
+  return idbOpenSafe().then(db => new Promise((resolve, reject) => {
     const tx  = db.transaction(IDB_STORE, 'readonly');
     const req = tx.objectStore(IDB_STORE).get(key);
     req.onsuccess = e => resolve(e.target.result);
@@ -4543,7 +4592,7 @@ function renderEmpleadoView(){
     if(validCoord(cl.lat,cl.lng)){
       html+='<div class="emp-btn emp-btn-nav" onclick="goNavigate('+cl.lat+','+cl.lng+')">🧭 Navegar</div>';
     }
-    html+='<div class="emp-btn emp-btn-done '+(j.status==='done'?'active':'')+'" onclick="empToggleDone(''+TODAY_KEY+'','+j.idx+')">'+(j.status==='done'?'✓ Listo':'Marcar listo')+'</div>';
+    html+='<div class="emp-btn emp-btn-done '+(j.status==='done'?'active':'')+'" onclick="empToggleDone(\''+TODAY_KEY+'\','+j.idx+')">'+(j.status==='done'?'✓ Listo':'Marcar listo')+'</div>';
     html+='</div></div>';
     return html;
   });
