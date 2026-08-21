@@ -1337,6 +1337,19 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       </div>
       <div id="usuarios-list"></div>
       <div id="grupos-list" style="display:none"></div>
+
+      <!-- Backup manual: notas y transacciones son solo locales a este
+           teléfono. Antes de borrar datos del sitio (o de perder el
+           celular) conviene descargar una copia. -->
+      <div style="margin:24px 16px 16px;padding:14px;border-radius:12px;background:var(--card);border:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">💾 Backup local</div>
+        <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Descarga una copia de Notas, Transacciones, Clientes y Agenda de este teléfono. Notas y Transacciones solo existen acá — hacé backup antes de borrar datos del sitio.</div>
+        <div style="display:flex;gap:8px">
+          <div class="bconfirm" style="flex:1;text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer" onclick="exportBackup()">⬇️ Descargar backup</div>
+          <div class="bconfirm" style="flex:1;text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;background:rgba(255,255,255,.06)" onclick="document.getElementById('backup-file-input').click()">⬆️ Restaurar</div>
+        </div>
+        <input type="file" id="backup-file-input" accept="application/json" style="display:none" onchange="importBackup(this.files[0])">
+      </div>
     </div>
 
   </div><!-- /pages -->
@@ -1654,6 +1667,7 @@ const clients=CR.map((c,i)=>({...c,id:i,service:SV[i%SV.length],price:PR[i%PR.le
   avc:AV[i%AV.length],last:i%5===0?'16 días':i%3===0?'8 días':'3 días',
   phone:'',address:c.zone,notes:'',deleted:false,googleMapsUrl:'',fechaCreacion:'2025-09-01T00:00:00.000Z'}));
 let nextClientId=clients.length;
+let _editingClientSnapshot = null; // huella del cliente al abrir edición (detección de conflictos)
 // Approx geographic centers per zone (San Juan, AR) used as fallback
 // when a client has no precise coordinates yet. Each client gets a
 // small deterministic offset so they don't all stack on one point.
@@ -2585,7 +2599,7 @@ function renderCalendar(){
     const key=calYear+'-'+pad2(calMonth+1)+'-'+pad2(day);
     const isToday=key===TODAY_KEY;
     const isSel=key===selectedDate;
-    const cnt=(schedule[key]||[]).length;
+    const cnt=jobsFor(key).length;
     html+=`<div class="cal-day ${isToday?'today':''} ${isSel?'sel':''}" onclick="selectDay('${key}')">
       ${day}
       ${cnt>0?`<span class="cnt">${cnt}</span>`:''}
@@ -3662,6 +3676,10 @@ function editClient(id){
   const c=clients[id];
   if(!c||c.deleted)return;
   document.getElementById('nc-editid').value=id;
+  // Guardar "huella" del cliente al momento de abrir el editor, para poder
+  // avisar si otro dispositivo lo modificó mientras tanto (evita pisar
+  // cambios ajenos en silencio).
+  _editingClientSnapshot = JSON.stringify({n:c.n,zone:c.zone,service:c.service,price:c.price,phone:c.phone,address:c.address,notes:c.notes});
   document.getElementById('nc-nombre').value=c.n;
   document.getElementById('nc-tel').value=c.phone||'';
   document.getElementById('nc-dir').value=c.address||'';
@@ -3699,7 +3717,7 @@ function askDeleteClient(){
   if(isNaN(id))return;
   confirmDeleteClient(id);
 }
-function saveCliente(){
+async function saveCliente(){
   const nombre = document.getElementById('nc-nombre').value.trim();
   if(!nombre){toast('⚠ Ingresá el nombre');return;}
   const editId = document.getElementById('nc-editid').value;
@@ -3730,6 +3748,21 @@ function saveCliente(){
 
   if(editId!==''){
     const c=clients[parseInt(editId)];
+    // Detección de conflicto: si otro dispositivo modificó este cliente
+    // mientras lo tenías abierto para editar, avisar antes de pisarlo.
+    if(c.supabase_id && _editingClientSnapshot && navigator.onLine){
+      try{
+        const {data:remote} = await sb.from('clientes').select('nombre,zona,servicio,precio,telefono,direccion,notas').eq('id',c.supabase_id).single();
+        if(remote){
+          const remoteSnapshot = JSON.stringify({n:remote.nombre,zone:remote.zona,service:remote.servicio,price:remote.precio,phone:remote.telefono,address:remote.direccion,notes:remote.notas});
+          if(remoteSnapshot !== _editingClientSnapshot){
+            const seguir = confirm('⚠ Este cliente fue modificado por otro dispositivo mientras lo editabas.\n\n¿Guardar igual tu versión? (se va a pisar el otro cambio)');
+            if(!seguir){ toast('Edición cancelada'); return; }
+          }
+        }
+      }catch(e){ /* sin conexión o error: continuar igual, no bloquear al usuario */ }
+    }
+    _editingClientSnapshot = null;
     c.n=nombre;c.zone=zona;c.service=svc;c.price=precio;c.phone=tel;c.address=dir||zona;c.notes=notas;
     c.av=nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
     if(hasCoords){c.lat=latVal;c.lng=lngVal;c.googleMapsUrl=mapsUrl;}
@@ -3873,6 +3906,60 @@ function dbSaveNow(){
 }
 
 // ── dbLoad: carga IndexedDB primero, fallback a localStorage ──
+// ── BACKUP MANUAL ──
+// Notas y Transacciones solo viven en este teléfono (no sincronizan con
+// Supabase). Esta función arma un archivo descargable con todo lo local,
+// para poder restaurarlo si se borra el navegador o se cambia de equipo.
+function exportBackup(){
+  const backup = {
+    _tipo: 'clean-pools-backup',
+    _version: 1,
+    _fecha: new Date().toISOString(),
+    notas: notas,
+    transactions: (typeof transactions!=='undefined') ? transactions : [],
+    clients: clients,
+    schedule: schedule,
+    habits: (typeof habits!=='undefined') ? habits : []
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fecha = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `cleanpools-backup-${fecha}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast('✓ Backup descargado');
+}
+
+function importBackup(file){
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const data = JSON.parse(e.target.result);
+      if(data._tipo !== 'clean-pools-backup'){
+        toast('⚠ Este archivo no es un backup válido de Clean Pools');
+        return;
+      }
+      const ok = confirm('Esto va a REEMPLAZAR las notas y transacciones actuales de este teléfono por las del backup (del '+(data._fecha?new Date(data._fecha).toLocaleString('es-AR'):'?')+').\n\n¿Continuar?');
+      if(!ok) return;
+      if(Array.isArray(data.notas)){ notas.length=0; notas.push(...data.notas); }
+      if(Array.isArray(data.transactions) && typeof transactions!=='undefined'){ transactions.length=0; transactions.push(...data.transactions); }
+      dbSaveNow();
+      toast('✓ Backup restaurado');
+      if(typeof renderNotas==='function') renderNotas();
+      if(typeof renderFinanzas==='function') renderFinanzas();
+    }catch(err){
+      console.warn('[Backup] error al importar', err);
+      toast('⚠ No se pudo leer el archivo de backup');
+    }
+  };
+  reader.readAsText(file);
+}
+
 async function dbLoad(){
   let data = null;
 
@@ -3950,6 +4037,22 @@ async function dbLoad(){
     if(data.nextNotaId) nextNotaId = Math.max(nextNotaId, data.nextNotaId);
     else nextNotaId = Math.max(nextNotaId, ...notas.map(n=>(n.id||0)+1));
   }
+
+  // 6) Limpieza automática: sacar de la agenda trabajos "fantasma" que
+  // apuntan a clientes borrados o inexistentes (evita puntitos azules
+  // en el calendario en días sin trabajos reales)
+  let _huerfanosLimpiados = 0;
+  Object.keys(schedule).forEach(k => {
+    const antes = schedule[k].length;
+    schedule[k] = schedule[k].filter(e => {
+      const cl = clients.find(c => c.id === e.clientId);
+      return cl && !cl.deleted;
+    });
+    _huerfanosLimpiados += antes - schedule[k].length;
+  });
+  if(_huerfanosLimpiados > 0){
+    console.log('[cleanup] '+_huerfanosLimpiados+' trabajo(s) huérfano(s) removido(s) de la agenda');
+  }
 }
 
 // ── Guardar antes de cerrar la pestaña ──
@@ -3991,47 +4094,6 @@ function toggleTheme(){
 
 
 // ── FINANZAS DINÁMICAS (BUG-05) ──
-function renderFinanzas(){
-  if(!document.getElementById('pg-finanzas').classList.contains('on')) return;
-  const now = new Date();
-  const monthStart = dkey(new Date(now.getFullYear(),now.getMonth(),1));
-  const monthEnd   = dkey(new Date(now.getFullYear(),now.getMonth()+1,0));
-
-  // Totales generales
-  const totalIn  = transactions.filter(t=>t.tipo==='ingreso').reduce((a,t)=>a+t.monto,0);
-  const totalOut = transactions.filter(t=>t.tipo==='gasto').reduce((a,t)=>a+t.monto,0);
-  const netFlow  = totalIn - totalOut;
-
-  // Ingresos CP del schedule (trabajos completados)
-  const cpIncome = Object.keys(schedule).reduce((acc,k)=>{
-    return acc + (schedule[k]||[]).filter(e=>e.status==='done').reduce((a,e)=>(clients[e.clientId]?.price||0)+a,0);
-  },0);
-
-  // Actualizar KPIs
-  const setEl = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
-  setEl('fin-total-in',  '$'+(totalIn/1000).toFixed(0)+'K');
-  setEl('fin-total-out', '$'+(totalOut/1000).toFixed(0)+'K');
-  setEl('fin-net',       (netFlow>=0?'+':'')+''+(netFlow/1000).toFixed(0)+'K');
-  setEl('fin-cp-income', '$'+(cpIncome/1000).toFixed(0)+'K');
-
-  // Últimas transacciones (10)
-  const el = document.getElementById('fin-trans-list');
-  if(!el) return;
-  const latest = [...transactions].sort((a,b)=>b.ts-a.ts).slice(0,10);
-  if(!latest.length){
-    el.innerHTML='<div class="nodata">No hay transacciones registradas</div>';
-    return;
-  }
-  el.innerHTML = latest.map(t=>`
-    <div class="fr">
-      <div>
-        <div class="fc">${t.desc}</div>
-        <div class="fd">${t.cat} · ${t.fecha}</div>
-      </div>
-      <div class="fa ${t.tipo==='ingreso'?'fin':'fout'}">${t.tipo==='ingreso'?'+':'−'}$${t.monto.toLocaleString('es-AR')}</div>
-    </div>`).join('');
-}
-
 // ── DASHBOARD DINÁMICO (BUG-01, BUG-04, BUG-15) ──
 function renderDashboard(){
   const now = new Date();
@@ -4508,7 +4570,19 @@ async function syncTrabajosDelDia(){
 function subscribeRealtime(){
   sb.channel('clientes-rt').on('postgres_changes',{event:'*',schema:'public',table:'clientes'},payload=>{
     const {eventType,new:nr,old:or}=payload;
-    if(eventType==='DELETE'){ const i=clients.findIndex(c=>c.supabase_id===or.id); if(i>-1)clients[i].deleted=true; }
+    if(eventType==='DELETE'){
+      const i=clients.findIndex(c=>c.supabase_id===or.id);
+      if(i>-1){
+        clients[i].deleted=true;
+        // Limpiar también los trabajos programados de este cliente (evita
+        // que queden "fantasma" contando para el puntito del calendario)
+        const cid=clients[i].id;
+        Object.keys(schedule).forEach(k=>{
+          schedule[k]=schedule[k].filter(e=>e.clientId!==cid);
+        });
+        renderCalendar();
+      }
+    }
     else{
       const mp=mapSbCliente(nr);
       let ex=clients.find(c=>c.supabase_id===nr.id);
