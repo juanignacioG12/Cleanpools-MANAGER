@@ -4474,9 +4474,13 @@ async function syncFromSupabase(){
     }
     await syncTrabajosDelDia();
     renderToday(); renderDashboard();
-    // Fusionar duplicados silenciosamente después de sync
+    // ⚠ La fusión automática de duplicados fue DESACTIVADA: se detectó que
+    // podía marcar clientes reales y distintos como "eliminados" sin pedir
+    // confirmación (agrupaba solo por nombre exacto, sin verificar teléfono
+    // ni dirección). Ahora solo se puede fusionar duplicados manualmente,
+    // desde el botón correspondiente, con revisión previa.
     const dupes=findDuplicates();
-    if(dupes.length){ mergeDuplicates(); console.log('[DedupAuto] fusionados'); }
+    if(dupes.length){ console.log('[Dedup] '+dupes.length+' posible(s) grupo(s) de duplicados detectado(s) — requiere revisión manual, no se fusiona solo'); }
   }catch(e){ console.warn('[SB] sync error',e); }
 }
 
@@ -4492,11 +4496,20 @@ function mapSbCliente(sc){
 async function syncTrabajosDelDia(){
   const {data:trabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',TODAY_KEY);
   if(!trabajos)return;
-  // Supabase es SIEMPRE la fuente de verdad para el día de hoy: se limpia
-  // la agenda local de hoy antes de repoblarla, para que nunca queden
-  // tareas locales sueltas (de pruebas, datos viejos, etc.) mezcladas
-  // con las reales.
-  schedule[TODAY_KEY]=[];
+  if(!schedule[TODAY_KEY]) schedule[TODAY_KEY]=[];
+
+  // ⚠ IMPORTANTE: antes esto borraba TODO schedule[TODAY_KEY] antes de
+  // repoblar desde Supabase. Eso causaba que una tarea recién creada
+  // (todavía sin supabase_id, mientras el guardado a Supabase estaba en
+  // curso) desapareciera para siempre si llegaba un evento de realtime
+  // de cualquier otro cambio en 'trabajos' justo en ese momento.
+  // Ahora: se actualiza/agrega por comparación, y solo se sacan las
+  // entradas que YA estaban sincronizadas (tienen supabase_id) pero
+  // dejaron de existir en Supabase. Las recién creadas sin supabase_id
+  // todavía se dejan intactas — no se tocan hasta que terminen de subir.
+  const validIds = new Set(trabajos.map(t=>t.id));
+  schedule[TODAY_KEY] = schedule[TODAY_KEY].filter(j => !j.supabase_id || validIds.has(j.supabase_id));
+
   trabajos.forEach(t=>{
     const cl=t.clientes; if(!cl||cl.deleted)return;
     let lc = clients.find(c=>c.supabase_id===cl.id);
@@ -4505,11 +4518,11 @@ async function syncTrabajosDelDia(){
     else if(!lc.supabase_id) lc.supabase_id=cl.id;
     const asignado=t.asignaciones?.some(a=>a.user_id===currentUser?.id);
     if(currentUser?.rol==='empleado'&&!asignado)return;
-    if(!schedule[TODAY_KEY])schedule[TODAY_KEY]=[];
-    if(!schedule[TODAY_KEY].find(j=>j.supabase_id===t.id)){
-      schedule[TODAY_KEY].push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
-        notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]});
-    }
+    const data={clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
+      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]};
+    const existing = schedule[TODAY_KEY].find(j=>j.supabase_id===t.id);
+    if(existing) Object.assign(existing, data);
+    else schedule[TODAY_KEY].push({supabase_id:t.id, ...data});
   });
 }
 
