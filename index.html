@@ -995,6 +995,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
           <div class="user-badge-name" id="user-badge-name">Juan</div>
           <div class="user-badge-rol" id="user-badge-rol">admin</div>
         </div>
+        <div id="sync-pending-badge" title="Cambios esperando conexión" style="display:none;margin-left:6px;background:#f5a623;color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 4px">0</div>
       </div>
       <div class="ib" id="theme-toggle" onclick="toggleTheme()">
         <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -1153,12 +1154,12 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
           <div class="mv" id="r-time">–</div>
           <div class="ms" id="r-stops">0 paradas</div>
         </div>
-        <div class="metric">
+        <div class="metric" id="metric-fact">
           <div class="ml">Facturación</div>
           <div class="mv blue" id="r-fact">–</div>
           <div class="ms">estimado del día</div>
         </div>
-        <div class="metric">
+        <div class="metric" id="metric-neto">
           <div class="ml">Neto</div>
           <div class="mv green" id="r-neto">–</div>
           <div class="ms">tras combustible</div>
@@ -1187,7 +1188,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
             <div><div class="rs-sum-val" id="rc-paradas">0</div><div class="rs-sum-lbl">Paradas</div></div>
             <div><div class="rs-sum-val" id="rc-km">0 km</div><div class="rs-sum-lbl">Distancia</div></div>
             <div><div class="rs-sum-val" id="rc-tiempo">0 min</div><div class="rs-sum-lbl">Tiempo est.</div></div>
-            <div><div class="rs-sum-val" id="rc-total">$0</div><div class="rs-sum-lbl">Facturación</div></div>
+            <div id="rc-total-wrap"><div class="rs-sum-val" id="rc-total">$0</div><div class="rs-sum-lbl">Facturación</div></div>
           </div>
         </div>
         <!-- BOTÓN COMENZAR RECORRIDO -->
@@ -1539,133 +1540,11 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 
 <script>
 // ── DATA ──
-const CR=[
-  {n:"Adriana Calle 6 y Vidart",lat:-31.5967,lng:-68.5634,zone:"Capital"},
-  {n:"Ana Colombo",lat:-31.6924,lng:-68.5532,zone:"Rawson"},
-  {n:"Nancy y Walter Estación",lat:-31.6546,lng:-68.4843,zone:"Pocito"},
-  {n:"Cintia Tía de Mariel",lat:-31.6736,lng:-68.5762,zone:"Rawson"},
-  {n:"Elba Cobos",lat:-31.6164,lng:-68.5793,zone:"Capital"},
-  {n:"Enrique Velazco",lat:-31.5910,lng:-68.4725,zone:"Pocito"},
-  {n:"Griselda 7x8",lat:-31.6811,lng:-68.4952,zone:"Pocito"},
-  {n:"Ricardo Mauselli",lat:-31.6958,lng:-68.5454,zone:"Rawson"},
-  {n:"Jesus Romera",lat:-31.6952,lng:-68.5447,zone:"Rawson"},
-  {n:"Luján Santa Lucía",lat:-31.5638,lng:-68.4602,zone:"Santa Lucía"},
-  {n:"Mariana Rodriguez",lat:-31.4913,lng:-68.5485,zone:"Capital"},
-  {n:"Martín Leanins",lat:-31.6318,lng:-68.5162,zone:"Rawson"},
-  {n:"Natalia Rosa",lat:-31.5724,lng:-68.5882,zone:"Capital"},
-  {n:"Paloma Medanito",lat:-31.5975,lng:-68.5058,zone:"Capital"},
-  {n:"Gastón Berenguer",lat:-31.6804,lng:-68.5525,zone:"Rawson"},
-  {n:"Adriana Capital",lat:-31.5366,lng:-68.5500,zone:"Capital"},
-  {n:"Adriana Vargas",lat:-31.5055,lng:-68.4761,zone:"Pocito"},
-  {n:"Agustín Brizuela",lat:-31.6140,lng:-68.6013,zone:"Rivadavia"},
-  {n:"Ale Rodriguez",lat:-31.6515,lng:-68.5836,zone:"Rawson"},
-  {n:"Amanda y Jorge Recabarren",lat:-31.6498,lng:-68.5580,zone:"Rawson"},
-  {n:"Ariel Roldán",lat:-31.5689,lng:-68.5032,zone:"Capital"},
-  {n:"Ariel Silva",lat:-31.7019,lng:-68.4870,zone:"Pocito"},
-  {n:"Beatriz Lucero",lat:-31.5278,lng:-68.5747,zone:"Capital"},
-  {n:"Brain",lat:-31.6712,lng:-68.5117,zone:"Rawson"},
-  {n:"Carina",lat:-31.5746,lng:-68.5826,zone:"Capital"},
-  {n:"Carlos Carrizo",lat:-31.6404,lng:-68.5741,zone:"Rawson"},
-  {n:"Cecilia Prestia",lat:-31.4872,lng:-68.4841,zone:"Pocito"},
-  {n:"Marcelo Pastrán",lat:-31.6740,lng:-68.5137,zone:"Rawson"},
-  {n:"Celina Cuevas",lat:-31.6583,lng:-68.5699,zone:"Rawson"},
-  {n:"Cintia Aciar",lat:-31.6797,lng:-68.5718,zone:"Rawson"},
-  {n:"Cristina De León",lat:-31.5367,lng:-68.6043,zone:"Rivadavia"},
-  {n:"Daniel Ferrer",lat:-31.6950,lng:-68.5864,zone:"Rawson"},
-  {n:"Daniel Vizcalino",lat:-31.5155,lng:-68.5850,zone:"Capital"},
-  {n:"Daniela Pringles",lat:-31.5089,lng:-68.5769,zone:"Capital"},
-  {n:"Diego Bolado",lat:-31.6412,lng:-68.6212,zone:"Rivadavia"},
-  {n:"Diego Leiva",lat:-31.5275,lng:-68.4740,zone:"Santa Lucía"},
-  {n:"Diego Kamariski",lat:-31.5501,lng:-68.5196,zone:"Capital"},
-  {n:"Edit Rosario Lima",lat:-31.6946,lng:-68.5520,zone:"Rawson"},
-  {n:"Eduardo Meljin",lat:-31.5459,lng:-68.5768,zone:"Capital"},
-  {n:"Erika Herman",lat:-31.6342,lng:-68.4959,zone:"Pocito"},
-  {n:"Fabiana Garcia Ferrer",lat:-31.6926,lng:-68.5858,zone:"Rawson"},
-  {n:"Fede Bazán",lat:-31.5248,lng:-68.5933,zone:"Capital"},
-  {n:"Federico Caballero",lat:-31.6517,lng:-68.5747,zone:"Rawson"},
-  {n:"Federico Palacios",lat:-31.6656,lng:-68.2422,zone:"Caucete"},
-  {n:"Francisco",lat:-31.6295,lng:-68.5399,zone:"Rawson"},
-  {n:"Francisco Benavidez",lat:-31.6776,lng:-68.5527,zone:"Rawson"},
-  {n:"Gabriela Gómez",lat:-31.6718,lng:-68.5777,zone:"Rawson"},
-  {n:"Guillermo Disanti",lat:-31.6429,lng:-68.5766,zone:"Rawson"},
-  {n:"Griselda",lat:-31.6714,lng:-68.5142,zone:"Rawson"},
-  {n:"Gustavo Adolfo",lat:-31.5661,lng:-68.5171,zone:"Capital"},
-  {n:"Héctor Vecino Diego",lat:-31.5274,lng:-68.4741,zone:"Santa Lucía"},
-  {n:"Irene Rulmann",lat:-31.6498,lng:-68.6048,zone:"Rivadavia"},
-  {n:"Ivana Irrazabal",lat:-31.7170,lng:-68.5059,zone:"Pocito"},
-  {n:"Jorge Castro",lat:-31.6250,lng:-68.5379,zone:"Rawson"},
-  {n:"Jorge Urcullu",lat:-31.6906,lng:-68.5532,zone:"Rawson"},
-  {n:"José Luis Almazán",lat:-31.5723,lng:-68.5072,zone:"Capital"},
-  {n:"José Pablo",lat:-31.6914,lng:-68.5532,zone:"Rawson"},
-  {n:"Juan Manuel Raigón",lat:-31.6880,lng:-68.5857,zone:"Rawson"},
-  {n:"Juan Salazar",lat:-31.6189,lng:-68.5491,zone:"Rawson"},
-  {n:"Laura Marquesado",lat:-31.5271,lng:-68.6286,zone:"Capital"},
-  {n:"Leticia Strada",lat:-31.5454,lng:-68.5161,zone:"Capital"},
-  {n:"Liliana Pajes",lat:-31.5630,lng:-68.5273,zone:"Capital"},
-  {n:"Luis Acosta",lat:-31.6446,lng:-68.5898,zone:"Rawson"},
-  {n:"Mabel Rodriguez",lat:-31.6435,lng:-68.5889,zone:"Rawson"},
-  {n:"Mabel Savi",lat:-31.6598,lng:-68.5697,zone:"Rawson"},
-  {n:"Marcelo Chiavarini",lat:-31.5260,lng:-68.5956,zone:"Capital"},
-  {n:"Marcelo Mena",lat:-31.6598,lng:-68.5072,zone:"Rawson"},
-  {n:"Maria Gema",lat:-31.6523,lng:-68.5835,zone:"Rawson"},
-  {n:"Maria Yeyi",lat:-31.5725,lng:-68.5879,zone:"Capital"},
-  {n:"Mariana Clevers",lat:-31.5939,lng:-68.4840,zone:"Pocito"},
-  {n:"Mariana Gómez",lat:-31.5729,lng:-68.5865,zone:"Capital"},
-  {n:"Nora Octubre",lat:-31.5306,lng:-68.5412,zone:"Capital"},
-  {n:"Mauriccio De Castillo",lat:-31.5634,lng:-68.5120,zone:"Capital"},
-  {n:"Mauricio Cano",lat:-31.6664,lng:-68.5805,zone:"Rawson"},
-  {n:"Mauricio Suárez",lat:-31.5197,lng:-68.5678,zone:"Capital"},
-  {n:"Maximiliano Tomba",lat:-31.6457,lng:-68.5653,zone:"Rawson"},
-  {n:"Miguel Montolla",lat:-31.6889,lng:-68.5968,zone:"Rawson"},
-  {n:"Milagros Álvarez",lat:-31.5878,lng:-68.5133,zone:"Capital"},
-  {n:"Miriam Rojas",lat:-31.6662,lng:-68.4983,zone:"Pocito"},
-  {n:"Nancy Chicón",lat:-31.6893,lng:-68.5860,zone:"Rawson"},
-  {n:"Natalia López",lat:-31.5541,lng:-68.5717,zone:"Capital"},
-  {n:"Nuria Maldonado",lat:-31.5835,lng:-68.5712,zone:"Capital"},
-  {n:"Quito Navarro",lat:-31.6286,lng:-68.4708,zone:"Pocito"},
-  {n:"Rodolfo Pons",lat:-31.5826,lng:-68.5400,zone:"Capital"},
-  {n:"Sandra Firmapaz",lat:-31.6740,lng:-68.5816,zone:"Rawson"},
-  {n:"Silvana Pergoles",lat:-31.6824,lng:-68.5685,zone:"Rawson"},
-  {n:"Silvia Gómez",lat:-31.5722,lng:-68.5235,zone:"Capital"},
-  {n:"Silvia y Daniel Salguero",lat:-31.5597,lng:-68.5164,zone:"Capital"},
-  {n:"Silvio Tío de Mariel",lat:-31.6716,lng:-68.5113,zone:"Rawson"},
-  {n:"Tatiana Sandez",lat:-31.5132,lng:-68.6152,zone:"Capital"},
-  {n:"Vanina Martín",lat:-31.6567,lng:-68.5720,zone:"Rawson"},
-  {n:"Vicente Serrano",lat:-31.6923,lng:-68.5528,zone:"Rawson"},
-  {n:"Virginia Silva",lat:-31.6419,lng:-68.6183,zone:"Rivadavia"},
-  {n:"Walter Pasten",lat:-31.6923,lng:-68.5866,zone:"Rawson"},
-  {n:"Yamila Campillay",lat:-31.7158,lng:-68.5069,zone:"Pocito"},
-  {n:"Fabián Rotten",lat:-31.6293,lng:-68.4942,zone:"Pocito"},
-  {n:"Germán Quiroga",lat:-31.6582,lng:-68.5742,zone:"Rawson"},
-  {n:"Laura Fernández",lat:-31.6587,lng:-68.5617,zone:"Rawson"},
-  {n:"Mauricio Páez",lat:-31.4218,lng:-68.4896,zone:"9 de Julio"},
-  {n:"Rosana Riveros",lat:-31.5610,lng:-68.5210,zone:"Capital"},
-  {n:"Rubén Ramírez",lat:-31.6315,lng:-68.5154,zone:"Rawson"},
-  {n:"Sixto Regio",lat:-31.6923,lng:-68.5124,zone:"Rawson"},
-  {n:"Ana Laura",lat:-31.6437,lng:-68.5897,zone:"Rawson"},
-  {n:"Dolores Fernández",lat:-31.6360,lng:-68.5093,zone:"Rawson"},
-  {n:"Eduardo Vives",lat:-31.6596,lng:-68.5707,zone:"Rawson"},
-  {n:"Fabiana Olivers",lat:-31.6474,lng:-68.5822,zone:"Rawson"},
-  {n:"Gloria Nieto",lat:-31.6547,lng:-68.5787,zone:"Rawson"},
-  {n:"Gastón Moreno",lat:-31.6711,lng:-68.5140,zone:"Rawson"},
-  {n:"Laura Lobos",lat:-31.6704,lng:-68.5694,zone:"Rawson"},
-  {n:"José Espejo",lat:-31.6640,lng:-68.5786,zone:"Rawson"},
-  {n:"Mario Paredes",lat:-31.6528,lng:-68.5754,zone:"Rawson"},
-  {n:"Nancy Nieto",lat:-31.6505,lng:-68.5766,zone:"Rawson"},
-  {n:"Maxi Cornejo",lat:-31.6426,lng:-68.5773,zone:"Rawson"},
-  {n:"Rodolfo Almagro Mula",lat:-31.5866,lng:-68.6012,zone:"Rivadavia"},
-  {n:"Silvana Rodriguez",lat:-31.6587,lng:-68.5655,zone:"Rawson"},
-  {n:"Sebastián Galdeano",lat:-31.6800,lng:-68.5866,zone:"Rawson"},
-  {n:"Viviana Almiron",lat:-31.6126,lng:-68.6015,zone:"Rivadavia"},
-];
-const SV=['Mant. semanal','Mant. semanal','Mant. semanal','Limpieza profunda','Mant. quincenal'];
-const PR=[15000,20000,25000,30000,40000,60000,80000];
-const ST=['activo','activo','activo','activo','activo','pendiente','activo'];
+// (El listado hardcodeado de ~100 clientes 'CR' fue removido.
+// Supabase es ahora la única fuente de verdad para clientes; se
+// cargan dinámicamente vía syncFromSupabase() al iniciar sesión.)
 const AV=['a1','a2','a3','a4','a5','a6'];
-const clients=CR.map((c,i)=>({...c,id:i,service:SV[i%SV.length],price:PR[i%PR.length],
-  status:ST[i%ST.length],av:c.n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2),
-  avc:AV[i%AV.length],last:i%5===0?'16 días':i%3===0?'8 días':'3 días',
-  phone:'',address:c.zone,notes:'',deleted:false,googleMapsUrl:'',fechaCreacion:'2025-09-01T00:00:00.000Z'}));
+const clients=[]; // se llena dinámicamente desde Supabase (ver syncFromSupabase())
 let nextClientId=clients.length;
 let _editingClientSnapshot = null; // huella del cliente al abrir edición (detección de conflictos)
 // Approx geographic centers per zone (San Juan, AR) used as fallback
@@ -1722,25 +1601,10 @@ function seedDay(key, entries){
   schedule[key] = entries;
 }
 
-seedDay(TODAY_KEY,[
-  {clientId:findOrCreateClient('Alamino','Pocito','Mant. semanal',25000,'Pocito · Calle 14'),time:'08:00',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Siry','Rawson','Mant. semanal',25000,'Rawson · Villa Elisa'),time:'09:30',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Walter Medano','Rawson','Mant. semanal',30000,'Rawson · El Médano'),time:'11:00',notes:'',status:'done'},
-  {clientId:findOrCreateClient('Laura Calle 11','Capital','Limpieza profunda',80000,'Capital · Calle 11'),time:'13:30',notes:'Llevar pastillas extra de cloro',status:'now'},
-  {clientId:findOrCreateClient('Disanti','Rawson','Mant. semanal',25000,'Rawson · La Porfiada'),time:'16:00',notes:'',status:'pend'},
-  {clientId:findOrCreateClient('Walter Pasten','Rawson','Mant. semanal',15000,'Rawson · zona sur'),time:'17:00',notes:'Perro suelto, tocar bocina',status:'pend'},
-]);
-// demo: a couple more days for the calendar
-seedDay(dkey(addDays(_now,1)),[
-  {clientId:findOrCreateClient('Vivíana Almiron','Rivadavia','Mant. semanal',20000,'#Chacabuco entre 8 y 9'),time:'15:30',notes:'',status:'pend'},
-  {clientId:findOrCreateClient('Marcelo Mena','Rawson','Mant. semanal',20000,'Rawson'),time:'14:00',notes:'',status:'pend'},
-]);
-seedDay(dkey(addDays(_now,2)),[
-  {clientId:findOrCreateClient('Silvia y Daniel salguero','Capital','Limpieza profunda',80000,'Atrás de Makro'),time:'14:00',notes:'',status:'pend'},
-]);
-seedDay(dkey(addDays(_now,-1)),[
-  {clientId:findOrCreateClient('Milagros alvarez','Capital','Mant. semanal',25000,'Pileta Milagros · CF6P+VMF Villa'),time:'15:30',notes:'',status:'done'},
-]);
+// (Datos de ejemplo/demo removidos — la agenda arranca vacía y se llena
+// exclusivamente con lo que haya guardado en Supabase/local. Ver seedDay()
+// arriba: queda disponible por si se necesita para pruebas manuales, pero
+// ya no se invoca automáticamente al cargar la app.)
 let habits=[
   {icon:'🏋️',name:'Gimnasio',streak:12,done:false},
   {icon:'📱',name:'Redes Clean Pools',streak:5,done:false},
@@ -2038,7 +1902,13 @@ function toggleWork(dateKey,idx){
   e.status = e.status==='done' ? 'pend' : (e.status==='pend' ? 'now' : 'done');
   renderToday();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
-  if(e.supabase_id) sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id).then(()=>{}).catch(()=>{});
+  if(e.supabase_id){
+    sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id)
+      .then(({error})=>{ if(error) queueSync('job_status',{dateKey,idx,status:e.status}); })
+      .catch(()=>queueSync('job_status',{dateKey,idx,status:e.status}));
+  } else {
+    queueSync('job_status',{dateKey,idx,status:e.status});
+  }
   dbSave();
 }
 
@@ -2253,11 +2123,13 @@ function detectPlatform(){
   return'web';
 }
 // Navegación directa (un solo destino) — abre la app de mapas en modo navegación
+// Se usa siempre el link universal https (recomendado por Google para web/PWA):
+// abre la app nativa de Maps en modo navegación en Android/iOS igual que los
+// esquemas nativos (google.navigation:, maps://), pero sin el error
+// "Enlace no admitido" que esos esquemas antiguos pueden disparar cuando se
+// abren desde una PWA en vez de una app nativa.
 function navUrl(c){
   if(!validCoord(c.lat,c.lng))return '#';
-  const plat=detectPlatform();
-  if(plat==='android')  return `google.navigation:q=${c.lat},${c.lng}&mode=d`;
-  if(plat==='ios')       return `maps://?daddr=${c.lat},${c.lng}&dirflg=d`;
   return `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}&travelmode=driving`;
 }
 // Fallback web (siempre funciona, usado si el deep link falla)
@@ -2305,9 +2177,18 @@ function renderRoute(){
   const totalMin = Math.round(totalKm/30*60) + jobs.length*15;
 
   document.getElementById('r-stops').textContent=jobs.length+(jobs.length===1?' parada':' paradas');
-  document.getElementById('r-fact').textContent=jobs.length?'$'+Math.round(total/1000)+'K':'–';
-  const fuelCost = Math.round(totalKm * 120); // ~$120/km
-  document.getElementById('r-neto').textContent=jobs.length?'$'+Math.round((total-fuelCost)/1000)+'K':'–';
+  // Facturación y Neto son información sensible del negocio: solo admin.
+  const _mFact=document.getElementById('metric-fact'), _mNeto=document.getElementById('metric-neto');
+  if(!isAdminUser()){
+    if(_mFact) _mFact.style.display='none';
+    if(_mNeto) _mNeto.style.display='none';
+  }else{
+    if(_mFact) _mFact.style.display='';
+    if(_mNeto) _mNeto.style.display='';
+    document.getElementById('r-fact').textContent=jobs.length?'$'+Math.round(total/1000)+'K':'–';
+    const fuelCost = Math.round(totalKm * 120); // ~$120/km
+    document.getElementById('r-neto').textContent=jobs.length?'$'+Math.round((total-fuelCost)/1000)+'K':'–';
+  }
   document.getElementById('r-km').textContent=jobs.length?totalKm.toFixed(1)+' km':'–';
   document.getElementById('r-time').textContent=jobs.length?Math.floor(totalMin/60)+'h '+(totalMin%60)+'m':'–';
 
@@ -2433,6 +2314,8 @@ function generarRecorrido(){
   document.getElementById('rc-tiempo').textContent  =
     (totalMin>=60 ? Math.floor(totalMin/60)+'h ' : '') + (totalMin%60)+'min';
   document.getElementById('rc-total').textContent   = '$'+Math.round(totalFact/1000)+'K';
+  const _rcWrap = document.getElementById('rc-total-wrap');
+  if(_rcWrap) _rcWrap.style.display = isAdminUser() ? '' : 'none';
 
   // Renderizar stops
   const stopsEl = document.getElementById('recorrido-stops');
@@ -2469,7 +2352,14 @@ function comenzarRecorrido(){
     if(!_recorridoJobs.length) return;
   }
 
-  const jobs = _recorridoJobs;
+  // Sacar paradas sin coordenadas válidas: si se incluyen, el link a
+  // Google Maps queda mal formado y Maps muestra "Enlace no admitido".
+  const jobs = _recorridoJobs.filter(j=>validCoord(j.client.lat,j.client.lng));
+  const sinCoord = _recorridoJobs.length - jobs.length;
+  if(sinCoord > 0){
+    toast('⚠ '+sinCoord+' parada(s) sin coordenadas no se incluyeron en el mapa');
+  }
+  if(!jobs.length){ toast('Ninguna parada tiene coordenadas cargadas'); return; }
 
   if(jobs.length === 1){
     goNavigate(jobs[0].client.lat, jobs[0].client.lng);
@@ -3786,7 +3676,7 @@ async function saveCliente(){
   dbSaveAndRefresh();
   // Sync a Supabase si hay conexión
   const savedCl = editId!=='' ? clients[parseInt(editId)] : clients[clients.length-1];
-  if(savedCl) saveClienteToSupabase(savedCl).catch(e=>console.warn('[SB] sync cliente:',e));
+  if(savedCl) saveClienteToSupabase(savedCl).catch(e=>{ console.warn('[SB] sync cliente:',e); queueSync('save_cliente',{clientId:savedCl.id}); });
   closeModal('cliente');
   resetClienteForm();
 }
@@ -3794,6 +3684,88 @@ async function saveCliente(){
 
 // ── TRANSACCIONES (BUG-05 / BUG-14) ──
 let transactions = []; // {id, tipo, cat, monto, desc, fecha}
+
+// ── COLA DE SINCRONIZACIÓN OFFLINE ──
+// Si una escritura a Supabase falla (sin conexión), se guarda acá en vez
+// de perderse. Se reintenta sola apenas hay internet, sin que nadie tenga
+// que volver a tocar la tarea/cliente manualmente.
+let syncQueue = [];
+try{
+  const _rawQueue = localStorage.getItem('cp_sync_queue_v1');
+  if(_rawQueue) syncQueue = JSON.parse(_rawQueue) || [];
+}catch(e){ syncQueue = []; }
+
+function saveSyncQueue(){
+  try{ localStorage.setItem('cp_sync_queue_v1', JSON.stringify(syncQueue)); }catch(e){}
+  updateSyncBadge();
+}
+
+function queueSync(type, payload){
+  syncQueue.push({id:'q'+Date.now()+Math.random().toString(36).slice(2,7), type, payload, ts:Date.now(), attempts:0});
+  saveSyncQueue();
+}
+
+let _flushingSyncQueue = false;
+async function flushSyncQueue(){
+  if(_flushingSyncQueue) return; // evitar corridas superpuestas
+  if(!navigator.onLine) return;
+  if(!syncQueue.length) return;
+  _flushingSyncQueue = true;
+  const pending = [...syncQueue];
+  let okCount = 0;
+  for(const item of pending){
+    try{
+      await runSyncQueueItem(item);
+      syncQueue = syncQueue.filter(q=>q.id!==item.id);
+      okCount++;
+    }catch(e){
+      item.attempts = (item.attempts||0)+1;
+      const idx = syncQueue.findIndex(q=>q.id===item.id);
+      if(idx>-1) syncQueue[idx].attempts = item.attempts;
+      // Si sigue sin conexión, no tiene sentido seguir intentando los demás ahora
+      if(!navigator.onLine) break;
+    }
+  }
+  saveSyncQueue();
+  if(okCount>0) toast('✓ '+okCount+' cambio(s) pendiente(s) sincronizado(s)');
+  _flushingSyncQueue = false;
+}
+
+async function runSyncQueueItem(item){
+  if(item.type==='job_status'){
+    const {dateKey, idx, status} = item.payload;
+    const job = schedule[dateKey]?.[idx];
+    if(!job) return; // el trabajo ya no existe (borrado) — descartar silenciosamente
+    if(job.supabase_id){
+      const {error} = await sb.from('trabajos').update({status: status||job.status}).eq('id',job.supabase_id);
+      if(error) throw error;
+    } else {
+      // El trabajo se creó offline y todavía no existe en Supabase:
+      // crearlo ya refleja el status actual (ver saveTrabajoToSupabase).
+      await saveTrabajoToSupabase(job, dateKey);
+    }
+  } else if(item.type==='save_cliente'){
+    const cl = clients[item.payload.clientId];
+    if(!cl) return; // cliente ya no existe
+    await saveClienteToSupabase(cl);
+  }
+}
+
+// Actualiza un pequeño indicador de "cambios pendientes" si existe en el DOM
+function updateSyncBadge(){
+  const el = document.getElementById('sync-pending-badge');
+  if(!el) return;
+  if(syncQueue.length>0){
+    el.style.display='inline-flex';
+    el.textContent = syncQueue.length>9 ? '9+' : String(syncQueue.length);
+    el.title = syncQueue.length+' cambio(s) esperando conexión para sincronizar';
+  } else {
+    el.style.display='none';
+  }
+}
+
+window.addEventListener('online', flushSyncQueue);
+setInterval(flushSyncQueue, 30000); // reintento periódico (además del evento 'online', poco confiable en mobile)
 let nextTransId = 1;
 
 // ════════════════════════════════════════════════════════════
@@ -3995,7 +3967,7 @@ async function dbLoad(){
 
   if(!data) return; // primera vez — no hay datos
 
-  // 1) Restaurar clientes (patch sobre la base CR[])
+  // 1) Restaurar clientes guardados localmente (patch por id)
   if(data.clients && data.clients.length){
     data.clients.forEach(sc => {
       const existing = clients.find(c => c.id === sc.id);
@@ -4232,6 +4204,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
+function isAdminUser(){ return currentUser?.rol==='admin' || currentUser?.rol==='administrador'; }
 let loginUsers  = [];
 let pinBuffer   = '';
 
@@ -4336,14 +4309,12 @@ function enterApp(){
     document.getElementById('user-badge-name').textContent=(currentUser.nombre||'').split(' ')[0];
     document.getElementById('user-badge-rol').textContent=currentUser.rol||'';
   }
+  updateSyncBadge();
 
   applyRoleRestrictions();
   syncFromSupabase();
   subscribeRealtime();
   initNotifications();
-  if(currentUser?.rol==='admin'){
-    setTimeout(()=>migrateBaseClientsToSupabase(), 3000);
-  }
 }
 
 
@@ -4418,7 +4389,7 @@ async function startImport(){
     if(existing){
       Object.assign(existing,data);
       updated++;
-      saveClienteToSupabase(existing).catch(()=>{});
+      saveClienteToSupabase(existing).catch(()=>queueSync('save_cliente',{clientId:existing.id}));
       log.innerHTML='<div class="import-row"><div class="import-status imp-ok"></div><div class="import-name">'+ex.nombre+'</div><div class="import-detail">actualizado</div></div>'+log.innerHTML;
     } else {
       const id=nextClientId++;
@@ -4428,7 +4399,7 @@ async function startImport(){
         fechaCreacion:new Date().toISOString(),...data};
       clients.push(newCl);
       created++;
-      saveClienteToSupabase(newCl).catch(()=>{});
+      saveClienteToSupabase(newCl).catch(()=>queueSync('save_cliente',{clientId:newCl.id}));
       log.innerHTML='<div class="import-row"><div class="import-status imp-warn"></div><div class="import-name">'+ex.nombre+'</div><div class="import-detail">creado</div></div>'+log.innerHTML;
     }
 
@@ -4441,35 +4412,6 @@ async function startImport(){
   document.getElementById('imp-done-ttl').textContent='¡Importación completa!';
   document.getElementById('imp-done-sub').textContent=
     created+' creados · '+updated+' actualizados'+(geocoded?' · '+geocoded+' ubicaciones GPS resueltas':'');
-}
-
-// ── MIGRAR CLIENTES BASE A SUPABASE (solo una vez) ──
-async function migrateBaseClientsToSupabase(){
-  try{
-    const {count} = await sb.from('clientes').select('*',{count:'exact',head:true});
-    if(count > 0){ console.log('[SB] Clientes ya migrados: '+count); return; }
-    console.log('[SB] Migrando '+clients.length+' clientes...');
-    toast('⏳ Sincronizando clientes con la nube...');
-    const BATCH=20;
-    let migrated=0;
-    for(let i=0;i<clients.length;i+=BATCH){
-      const batch=clients.slice(i,i+BATCH).filter(cl=>!cl.deleted).map(cl=>({
-        nombre:cl.n, telefono:cl.phone||'', direccion:cl.address||cl.zone||'',
-        zona:cl.zone||'Capital', servicio:cl.service||'Mant. semanal', precio:cl.price||0,
-        lat:cl.lat||null, lng:cl.lng||null, google_maps_url:cl.googleMapsUrl||'',
-        notas:cl.notes||'', status:cl.status||'activo', deleted:false
-      }));
-      const {data,error}=await sb.from('clientes').insert(batch).select();
-      if(error){console.warn('[SB] batch error:',error);continue;}
-      if(data) data.forEach((row,j)=>{const local=clients[i+j];if(local)local.supabase_id=row.id;});
-      migrated+=batch.length;
-    }
-    dbSave();
-    toast('✅ '+migrated+' clientes sincronizados con la nube');
-  }catch(e){
-    console.warn('[SB] migrate error:',e);
-    toast('⚠ Error al sincronizar clientes.');
-  }
 }
 
 function applyRoleRestrictions(){
@@ -4516,6 +4458,7 @@ function showUserMenu(){
 
 async function syncFromSupabase(){
   try{
+    await flushSyncQueue(); // primero subir cambios pendientes, después traer lo fresco
     const {data:cls}=await sb.from('clientes').select('*').eq('deleted',false);
     if(cls&&cls.length){
       cls.forEach(sc=>{
@@ -4549,8 +4492,11 @@ function mapSbCliente(sc){
 async function syncTrabajosDelDia(){
   const {data:trabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',TODAY_KEY);
   if(!trabajos)return;
-  const hasSynced=(schedule[TODAY_KEY]||[]).some(j=>j._fromSupabase);
-  if(hasSynced) schedule[TODAY_KEY]=[];
+  // Supabase es SIEMPRE la fuente de verdad para el día de hoy: se limpia
+  // la agenda local de hoy antes de repoblarla, para que nunca queden
+  // tareas locales sueltas (de pruebas, datos viejos, etc.) mezcladas
+  // con las reales.
+  schedule[TODAY_KEY]=[];
   trabajos.forEach(t=>{
     const cl=t.clientes; if(!cl||cl.deleted)return;
     let lc = clients.find(c=>c.supabase_id===cl.id);
@@ -4677,8 +4623,17 @@ function renderEmpleadoView(){
 async function empToggleDone(dateKey,idx){
   const e=schedule[dateKey][idx]; e.status=e.status==='done'?'pend':'done';
   renderEmpleadoView(); renderToday();
-  if(e.supabase_id) await sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id);
-  dbSave();
+  if(e.supabase_id){
+    try{
+      const {error} = await sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id);
+      if(error) queueSync('job_status',{dateKey,idx,status:e.status});
+    }catch(err){
+      queueSync('job_status',{dateKey,idx,status:e.status});
+    }
+  } else {
+    queueSync('job_status',{dateKey,idx,status:e.status});
+  }
+  dbSave(); // siempre se guarda localmente, haya o no conexión
 }
 
 
