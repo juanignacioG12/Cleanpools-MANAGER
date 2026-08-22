@@ -4031,14 +4031,19 @@ async function dbLoad(){
 window.addEventListener('beforeunload', () => dbSaveNow());
 window.addEventListener('pagehide',     () => dbSaveNow()); // iOS Safari
 
+// Actualiza la lista de sugerencias de clientes (datalist) al escribir un nombre
+function refreshClientDatalist(){
+  const el = document.getElementById('cli-dl');
+  if(el) el.innerHTML = clients.filter(c=>!c.deleted).map(c=>`<option value="${c.n}">`).join('');
+}
+
 // Llama dbSave + actualiza datalist
 function dbSaveAndRefresh(){
   dbSave();
-  document.getElementById('cli-dl').innerHTML =
-    clients.filter(c=>!c.deleted).map(c=>`<option value="${c.n}">`).join('');
+  refreshClientDatalist();
 }
 // ── DATALIST ──
-document.getElementById('cli-dl').innerHTML=clients.filter(c=>!c.deleted).map(c=>`<option value="${c.n}">`).join('');
+refreshClientDatalist();
 
 
 // ── THEME ──
@@ -4460,7 +4465,8 @@ async function syncFromSupabase(){
   try{
     await flushSyncQueue(); // primero subir cambios pendientes, después traer lo fresco
     const {data:cls}=await sb.from('clientes').select('*').eq('deleted',false);
-    if(cls&&cls.length){
+    if(cls){
+      const validSupabaseIds = new Set(cls.map(sc=>sc.id));
       cls.forEach(sc=>{
         // Buscar primero por supabase_id, luego por nombre normalizado
         let ex = clients.find(c=>c.supabase_id===sc.id);
@@ -4469,7 +4475,18 @@ async function syncFromSupabase(){
         if(ex){ Object.assign(ex,mp); ex.supabase_id=sc.id; }
         else clients.push(mp);
       });
+      // Reconciliar: un cliente local con supabase_id que YA NO aparece en
+      // Supabase fue eliminado ahí (ej. la limpieza de datos de prueba de
+      // hoy) — se marca eliminado acá también para que todos los
+      // dispositivos terminen mostrando el mismo número real de clientes.
+      clients.forEach(c=>{
+        if(c.supabase_id && !validSupabaseIds.has(c.supabase_id) && !c.deleted){
+          c.deleted = true;
+        }
+      });
+      dbSave();
       filterClients();
+      refreshClientDatalist();
       if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
     }
     await syncTrabajosDelDia();
@@ -4549,7 +4566,7 @@ function subscribeRealtime(){
       if(ex){Object.assign(ex,mp);ex.supabase_id=nr.id;}
       else{mp.id=nextClientId++;clients.push(mp);}
     }
-    filterClients(); if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
+    filterClients(); refreshClientDatalist(); if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
   }).subscribe();
   sb.channel('trabajos-rt').on('postgres_changes',{event:'*',schema:'public',table:'trabajos'},()=>{
     const prevCount=(schedule[TODAY_KEY]||[]).length;
