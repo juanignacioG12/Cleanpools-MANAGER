@@ -3694,6 +3694,19 @@ try{
   const _rawQueue = localStorage.getItem('cp_sync_queue_v1');
   if(_rawQueue) syncQueue = JSON.parse(_rawQueue) || [];
 }catch(e){ syncQueue = []; }
+// ⚠ Reseteo de una sola vez: descartar cualquier pendiente encolado ANTES
+// de la limpieza de datos de prueba de hoy (21/08/2026), para que no se
+// reinyecten clientes/tareas viejos y contaminados a la base ya limpia.
+try{
+  if(!localStorage.getItem('cp_queue_reset_20260821')){
+    if(syncQueue.length){
+      console.log('[SyncQueue] Descartando '+syncQueue.length+' pendiente(s) previo(s) a la limpieza');
+      syncQueue = [];
+      localStorage.setItem('cp_sync_queue_v1', '[]');
+    }
+    localStorage.setItem('cp_queue_reset_20260821', '1');
+  }
+}catch(e){}
 
 function saveSyncQueue(){
   try{ localStorage.setItem('cp_sync_queue_v1', JSON.stringify(syncQueue)); }catch(e){}
