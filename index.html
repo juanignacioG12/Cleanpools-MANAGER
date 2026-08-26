@@ -4595,6 +4595,26 @@ function subscribeRealtime(){
       }
     });
   }).subscribe();
+  // ⚠ IMPORTANTE: la asignación a un empleado se guarda en una tabla
+  // aparte ('asignaciones'), en un segundo paso DESPUÉS de crear el
+  // trabajo. Sin esta suscripción, el trabajo dispara el aviso en tiempo
+  // real un instante ANTES de que exista la asignación, así que el
+  // empleado nunca se enteraba de que le asignaron algo. Se escucha esta
+  // tabla también para volver a sincronizar apenas se confirma quién
+  // quedó asignado.
+  sb.channel('asignaciones-rt').on('postgres_changes',{event:'*',schema:'public',table:'asignaciones'},()=>{
+    const prevCount=(schedule[TODAY_KEY]||[]).length;
+    syncTrabajosDelDia().then(()=>{
+      renderToday();
+      if(currentUser?.rol==='empleado'){
+        renderEmpleadoView();
+        const newCount=(schedule[TODAY_KEY]||[]).length;
+        if(newCount>prevCount){
+          sendNotif('Clean Pools SJ','Tenés un nuevo trabajo asignado para hoy 📋');
+        }
+      }
+    });
+  }).subscribe();
 }
 
 async function saveClienteToSupabase(cl){
