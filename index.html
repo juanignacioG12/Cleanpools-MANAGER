@@ -4512,7 +4512,10 @@ async function syncFromSupabase(){
     // desde el botón correspondiente, con revisión previa.
     const dupes=findDuplicates();
     if(dupes.length){ console.log('[Dedup] '+dupes.length+' posible(s) grupo(s) de duplicados detectado(s) — requiere revisión manual, no se fusiona solo'); }
-  }catch(e){ console.warn('[SB] sync error',e); }
+  }catch(e){
+    console.warn('[SB] sync error',e);
+    toast('⚠ Error al sincronizar: '+(e?.message||e));
+  }
 }
 
 function mapSbCliente(sc){
@@ -4525,7 +4528,12 @@ function mapSbCliente(sc){
 }
 
 async function syncTrabajosDelDia(){
-  const {data:trabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',TODAY_KEY);
+  const {data:trabajos,error:errTrabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',TODAY_KEY);
+  if(errTrabajos){
+    console.warn('[syncTrabajosDelDia] error consulta:', errTrabajos);
+    if(currentUser?.rol==='empleado') toast('⚠ Error trayendo trabajos: '+errTrabajos.message);
+    return;
+  }
   if(!trabajos)return;
   if(!schedule[TODAY_KEY]) schedule[TODAY_KEY]=[];
 
@@ -4541,13 +4549,20 @@ async function syncTrabajosDelDia(){
   const validIds = new Set(trabajos.map(t=>t.id));
   schedule[TODAY_KEY] = schedule[TODAY_KEY].filter(j => !j.supabase_id || validIds.has(j.supabase_id));
 
+  // DIAGNÓSTICO TEMPORAL (solo empleado): ver cuántos trabajos trajo la
+  // consulta para hoy y cuántos coinciden con este usuario, para
+  // encontrar dónde se corta la asignación.
+  let _diagAsignados=0, _diagSinCliente=0;
+
   trabajos.forEach(t=>{
-    const cl=t.clientes; if(!cl||cl.deleted)return;
+    const cl=t.clientes;
+    if(!cl||cl.deleted){ _diagSinCliente++; return; }
     let lc = clients.find(c=>c.supabase_id===cl.id);
     if(!lc) lc = clients.find(c=>!c.deleted && normName(c.n)===normName(cl.nombre));
     if(!lc){ lc=mapSbCliente(cl); clients.push(lc); }
     else if(!lc.supabase_id) lc.supabase_id=cl.id;
     const asignado=t.asignaciones?.some(a=>a.user_id===currentUser?.id);
+    if(asignado) _diagAsignados++;
     if(currentUser?.rol==='empleado'&&!asignado)return;
     const data={clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]};
@@ -4555,6 +4570,10 @@ async function syncTrabajosDelDia(){
     if(existing) Object.assign(existing, data);
     else schedule[TODAY_KEY].push({supabase_id:t.id, ...data});
   });
+
+  if(currentUser?.rol==='empleado'){
+    toast('🔍 Hoy: '+trabajos.length+' trabajo(s) en total, '+_diagAsignados+' asignado(s) a vos'+(_diagSinCliente?', '+_diagSinCliente+' sin cliente válido':''));
+  }
 }
 
 function subscribeRealtime(){
