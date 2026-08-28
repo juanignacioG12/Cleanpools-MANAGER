@@ -2943,7 +2943,10 @@ function saveWork(){
           ));
           job.asignaciones = assignUserIds.map(uid=>({user_id:uid}));
         }
-      }catch(e){ console.warn('[SB] sync trabajo+asign:',e); }
+      }catch(e){
+        console.warn('[SB] sync trabajo+asign:',e);
+        toast('⚠ No se pudo guardar en la nube: '+(e?.message||JSON.stringify(e)));
+      }
     });
   });
   closeModal('work');
