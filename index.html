@@ -2973,7 +2973,26 @@ function saveFin(){
 // ════════════════════════════════════════════════════════════
 let _navHistory = ['dashboard']; // stack de páginas visitadas
 
+// Páginas restringidas por rol — chequeo central usado por showPage()
+// para que NINGUNA vía de navegación (swipe, botón atrás del teléfono,
+// etc.) pueda saltarse las restricciones que ya se aplican a los botones.
+function isPageAllowedForRole(id){
+  const restricted = {
+    dashboard: ()=> currentUser?.rol!=='empleado',
+    clientes:  ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
+    finanzas:  ()=> currentUser?.rol==='admin',
+    notas:     ()=> currentUser?.rol==='admin',
+    mapa:      ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
+    usuarios:  ()=> currentUser?.rol==='admin',
+  };
+  return restricted[id] ? restricted[id]() : true; // páginas no listadas: sin restricción (ej. ruta, empleado, agenda)
+}
+
 function showPage(id, tab){
+  // Bloqueo central por rol — si no está permitida, no navega a ningún
+  // lado (se queda donde está) en vez de mostrar una pantalla indebida.
+  if(!isPageAllowedForRole(id)) return;
+
   // Guardar en stack de navegación interno
   if(_navHistory[_navHistory.length-1] !== id){
     _navHistory.push(id);
@@ -3007,7 +3026,12 @@ window.addEventListener('popstate', function(e){
   // Remover la página actual del stack
   if(_navHistory.length > 1){
     _navHistory.pop();
-    const prev = _navHistory[_navHistory.length-1];
+    let prev = _navHistory[_navHistory.length-1];
+    // Mismo chequeo de permisos que showPage() — el botón atrás del
+    // teléfono tampoco puede saltarse las restricciones por rol.
+    if(!isPageAllowedForRole(prev)){
+      prev = currentUser?.rol==='empleado' ? 'empleado' : 'dashboard';
+    }
     // Navegar a la página anterior sin pushear al history (ya lo hizo popstate)
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
     const pg = document.getElementById('pg-'+prev);
@@ -5310,11 +5334,33 @@ function exportToGoogleCalendar(dateKey){
 // CORRECCIÓN 4: Navegación por swipe
 // ════════════════════════════════════════════
 (function(){
-  const PAGES = ['dashboard','clientes','ruta','finanzas','notas','mapa'];
+  const ALL_PAGES = ['dashboard','clientes','ruta','finanzas','notas','mapa'];
   let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
   const THRESHOLD = 60;   // px mínimos para considerar swipe
   const MAX_ANGLE = 35;   // grados máximos de desviación vertical
   const MAX_TIME  = 400;  // ms máximos para el gesto
+
+  // ⚠ IMPORTANTE: antes esta lista era fija para todos los roles, así que
+  // deslizando el dedo se podía llegar a Finanzas/Notas/Clientes/Mapa
+  // aunque esos botones estuvieran ocultos para el rol actual (ej. un
+  // empleado deslizando desde "Ruta"). Ahora se calcula qué páginas están
+  // realmente permitidas para el rol actual, igual que en
+  // applyRoleRestrictions(), y el swipe nunca sale de ese conjunto.
+  function allowedPages(){
+    const rol = currentUser?.rol || 'empleado';
+    const isEmpleado = rol==='empleado';
+    const isAdmin = rol==='admin';
+    const isAdm = rol==='administrador' || isAdmin;
+    return ALL_PAGES.filter(p=>{
+      if(p==='dashboard') return !isEmpleado;
+      if(p==='clientes')  return isAdm;
+      if(p==='ruta')       return true;
+      if(p==='finanzas')  return isAdmin;
+      if(p==='notas')     return isAdmin;
+      if(p==='mapa')      return isAdm;
+      return false;
+    });
+  }
 
   document.addEventListener('touchstart', e=>{
     touchStartX = e.touches[0].clientX;
@@ -5339,7 +5385,13 @@ function exportToGoogleCalendar(dateKey){
     const angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
     if(angle > MAX_ANGLE && angle < (180 - MAX_ANGLE)) return; // demasiado vertical
 
-    // Determinar página actual
+    // Empleado: no tiene páginas swipeables propias (su vista es fija),
+    // así que directamente no se permite ningún swipe entre pestañas.
+    if(currentUser?.rol==='empleado') return;
+
+    const PAGES = allowedPages();
+
+    // Determinar página actual (solo entre las permitidas)
     const curPage = PAGES.find(p=>{
       const el=document.getElementById('pg-'+p);
       return el && el.classList.contains('on');
@@ -5348,10 +5400,10 @@ function exportToGoogleCalendar(dateKey){
 
     const curIdx = PAGES.indexOf(curPage);
     if(dx < 0 && curIdx < PAGES.length-1){
-      // Swipe izquierda → página siguiente
+      // Swipe izquierda → página siguiente permitida
       showPage(PAGES[curIdx+1], null);
     } else if(dx > 0 && curIdx > 0){
-      // Swipe derecha → página anterior
+      // Swipe derecha → página anterior permitida
       showPage(PAGES[curIdx-1], null);
     }
   }, {passive:true});
