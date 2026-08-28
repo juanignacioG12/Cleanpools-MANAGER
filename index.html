@@ -3690,6 +3690,7 @@ let transactions = []; // {id, tipo, cat, monto, desc, fecha}
 // Si una escritura a Supabase falla (sin conexión), se guarda acá en vez
 // de perderse. Se reintenta sola apenas hay internet, sin que nadie tenga
 // que volver a tocar la tarea/cliente manualmente.
+let _lastSyncDiag = null; // diagnóstico persistente de la última sincronización (empleado)
 let syncQueue = [];
 try{
   const _rawQueue = localStorage.getItem('cp_sync_queue_v1');
@@ -4505,6 +4506,13 @@ async function syncFromSupabase(){
     }
     await syncTrabajosDelDia();
     renderToday(); renderDashboard();
+    // ⚠ IMPORTANTE: sin esto, un empleado que abre la app DESPUÉS de que
+    // ya le asignaron una tarea (no en el momento) nunca veía el
+    // resultado de esta primera sincronización — la pantalla se pintaba
+    // una sola vez, antes de que terminara de traer los datos, y solo
+    // se repintaba con avisos en tiempo real (que no llegan si la
+    // asignación ya existía de antes).
+    if(currentUser?.rol==='empleado') renderEmpleadoView();
     // ⚠ La fusión automática de duplicados fue DESACTIVADA: se detectó que
     // podía marcar clientes reales y distintos como "eliminados" sin pedir
     // confirmación (agrupaba solo por nombre exacto, sin verificar teléfono
@@ -4572,7 +4580,7 @@ async function syncTrabajosDelDia(){
   });
 
   if(currentUser?.rol==='empleado'){
-    toast('🔍 Hoy: '+trabajos.length+' trabajo(s) en total, '+_diagAsignados+' asignado(s) a vos'+(_diagSinCliente?', '+_diagSinCliente+' sin cliente válido':''));
+    _lastSyncDiag = {total: trabajos.length, asignados: _diagAsignados, sinCliente: _diagSinCliente, hora: new Date().toLocaleTimeString('es-AR')};
   }
 }
 
@@ -4677,7 +4685,17 @@ function renderEmpleadoView(){
   if(dateEl)dateEl.textContent=now.getDate()+' de '+MONTHS[now.getMonth()]+' '+now.getFullYear();
   const jobs=jobsFor(TODAY_KEY);
   if(!jobs.length){
-    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text3)">No tenés trabajos asignados para hoy 🎉</div>';
+    let diagHtml = '';
+    if(_lastSyncDiag){
+      diagHtml = '<div style="margin-top:14px;font-size:11px;color:var(--text3);opacity:.7">'
+        + '🔍 Diagnóstico ('+_lastSyncDiag.hora+'): '+_lastSyncDiag.total+' trabajo(s) hoy en Supabase, '
+        + _lastSyncDiag.asignados+' asignado(s) a vos'
+        + (_lastSyncDiag.sinCliente ? ', '+_lastSyncDiag.sinCliente+' sin cliente válido' : '')
+        + '</div>';
+    } else {
+      diagHtml = '<div style="margin-top:14px;font-size:11px;color:var(--text3);opacity:.7">🔍 Diagnóstico: la sincronización todavía no corrió o falló antes de completarse</div>';
+    }
+    el.innerHTML='<div style="text-align:center;padding:40px 16px;color:var(--text3)">No tenés trabajos asignados para hoy 🎉'+diagHtml+'</div>';
     return;
   }
   const rows = jobs.map(j=>{
