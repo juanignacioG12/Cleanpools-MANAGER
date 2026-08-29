@@ -5421,7 +5421,16 @@ function exportToGoogleCalendar(dateKey){
   try{
     const savedPage = localStorage.getItem('cp_page_v1') || 'dashboard';
     const validPages = ['dashboard','mapa','clientes','ruta','finanzas','notas','agenda','usuarios','empleado'];
-    const page = validPages.includes(savedPage) ? savedPage : 'dashboard';
+    let page = validPages.includes(savedPage) ? savedPage : 'dashboard';
+    // ⚠ IMPORTANTE: esta restauración pasaba por alto las restricciones de
+    // rol por completo — si un empleado había llegado alguna vez a una
+    // pantalla restringida (ej. por el bug del swipe, ya corregido), esa
+    // pantalla quedaba guardada como "la última" y se restauraba SIEMPRE
+    // en cada apertura, en vez de llevarlo a su pantalla de empleado.
+    if(!isPageAllowedForRole(page)){
+      page = currentUser?.rol==='empleado' ? 'empleado' : 'dashboard';
+      try{ localStorage.setItem('cp_page_v1', page); }catch(e){}
+    }
     history.replaceState({page:'dashboard'}, '', '#dashboard');
     if(page !== 'dashboard'){
       history.pushState({page}, '', '#'+page);
@@ -5447,7 +5456,8 @@ function exportToGoogleCalendar(dateKey){
 
   // Renders específicos de página restaurada
   try{
-    const page = localStorage.getItem('cp_page_v1') || 'dashboard';
+    let page = localStorage.getItem('cp_page_v1') || 'dashboard';
+    if(!isPageAllowedForRole(page)) page = currentUser?.rol==='empleado' ? 'empleado' : 'dashboard';
     if(page==='agenda')   renderCalendar();
     if(page==='finanzas') renderFinanzas();
     if(page==='notas')    renderNotas();
