@@ -3601,7 +3601,10 @@ function fabNewCliente(){
 }
 function editClient(id){
   const c=clients[id];
-  if(!c||c.deleted)return;
+  if(!c||c.deleted){
+    alert('🔍 DEBUG editClient\nid pedido: '+id+'\ntotal clientes en memoria: '+clients.length+'\nclients['+id+'] existe: '+(!!c)+'\ndeleted: '+(c?c.deleted:'N/A'));
+    return;
+  }
   document.getElementById('nc-editid').value=id;
   // Guardar "huella" del cliente al momento de abrir el editor, para poder
   // avisar si otro dispositivo lo modificó mientras tanto (evita pisar
@@ -4707,7 +4710,10 @@ async function saveClienteToSupabase(cl){
 
 async function saveTrabajoToSupabase(job,dateKey){
   const cl=clients[job.clientId];
-  if(!cl) throw new Error('Cliente no encontrado para el trabajo');
+  if(!cl){
+    console.error('[DEBUG cliente no encontrado]', 'job.clientId:', job.clientId, 'clients.length:', clients.length, 'job:', JSON.stringify(job));
+    throw new Error('Cliente no encontrado. clientId='+job.clientId+', total clientes='+clients.length);
+  }
   // Asegurar que el cliente existe en Supabase primero
   if(!cl.supabase_id) await saveClienteToSupabase(cl);
   if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
