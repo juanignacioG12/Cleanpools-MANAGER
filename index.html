@@ -4530,11 +4530,22 @@ async function syncFromSupabase(){
       // Supabase fue eliminado ahí (ej. la limpieza de datos de prueba de
       // hoy) — se marca eliminado acá también para que todos los
       // dispositivos terminen mostrando el mismo número real de clientes.
-      clients.forEach(c=>{
-        if(c.supabase_id && !validSupabaseIds.has(c.supabase_id) && !c.deleted){
-          c.deleted = true;
-        }
-      });
+      //
+      // ⚠ BLINDAJE: si la respuesta de Supabase viene sospechosamente
+      // incompleta (ej. por un corte de red a mitad de la consulta), NO
+      // se reconcilia — evita marcar clientes reales como eliminados por
+      // un problema pasajero de conexión en vez de un borrado real.
+      const localSyncedCount = clients.filter(c=>c.supabase_id && !c.deleted).length;
+      const respuestaConfiable = cls.length > 0 && cls.length >= localSyncedCount * 0.5;
+      if(respuestaConfiable){
+        clients.forEach(c=>{
+          if(c.supabase_id && !validSupabaseIds.has(c.supabase_id) && !c.deleted){
+            c.deleted = true;
+          }
+        });
+      } else if(localSyncedCount > 0){
+        console.warn('[Reconcile] Respuesta de Supabase sospechosa ('+cls.length+' de '+localSyncedCount+' esperados) — se omite la reconciliación esta vez');
+      }
       dbSave();
       filterClients();
       refreshClientDatalist();
