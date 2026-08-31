@@ -2141,6 +2141,8 @@ function navUrlWeb(c){
 function goNavigate(lat,lng){
   const c={lat,lng};
   if(!validCoord(lat,lng)){toast('⚠ Este cliente no tiene coordenadas válidas');return;}
+  console.log('[DEBUG goNavigate]', lat, lng, navUrl(c));
+  alert('🔍 DEBUG - link generado:\n\n'+navUrl(c));
   const plat=detectPlatform();
   if(plat==='web'){ window.open(navUrlWeb(c),'_blank'); return; }
   const deep=navUrl(c);
@@ -2394,6 +2396,8 @@ function comenzarRecorrido(){
       `&waypoints=${encodeURIComponent(waypoints)}`+
       `&travelmode=driving`;
 
+    console.log('[DEBUG recorrido URL]', url);
+    alert('🔍 DEBUG - link generado:\n\n'+url);
     window.open(url, '_blank');
     toast('🗺 Abriendo Google Maps con '+jobs.length+' paradas...');
   } else {
@@ -2984,8 +2988,13 @@ function isPageAllowedForRole(id){
     notas:     ()=> currentUser?.rol==='admin',
     mapa:      ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
     usuarios:  ()=> currentUser?.rol==='admin',
+    // ⚠ Se me había pasado esta: un empleado que quedó "pegado" en la
+    // Agenda general (por el bug del swipe, ya corregido) nunca era
+    // redirigido a su propia pantalla de trabajos, porque esta página no
+    // estaba en la lista de restringidas.
+    agenda:    ()=> currentUser?.rol!=='empleado',
   };
-  return restricted[id] ? restricted[id]() : true; // páginas no listadas: sin restricción (ej. ruta, empleado, agenda)
+  return restricted[id] ? restricted[id]() : true; // páginas no listadas: sin restricción (ej. ruta, empleado)
 }
 
 function showPage(id, tab){
