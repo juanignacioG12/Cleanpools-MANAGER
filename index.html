@@ -4518,7 +4518,13 @@ function showUserMenu(){
 async function syncFromSupabase(){
   try{
     await flushSyncQueue(); // primero subir cambios pendientes, después traer lo fresco
-    const {data:cls}=await sb.from('clientes').select('*').eq('deleted',false);
+    // ⚠ CRÍTICO: .order('id') es obligatorio acá. Sin un orden explícito,
+    // Supabase puede devolver las filas en distinto orden en cada carga de
+    // la app. Como el id interno de cada cliente se asigna según el orden
+    // de llegada, el MISMO cliente real podía terminar con un id interno
+    // distinto de una sesión a otra — rompiendo tareas ya creadas y
+    // botones "Editar" que quedaron con el id viejo horneado en la tarjeta.
+    const {data:cls}=await sb.from('clientes').select('*').eq('deleted',false).order('id');
     if(cls){
       const validSupabaseIds = new Set(cls.map(sc=>sc.id));
       cls.forEach(sc=>{
@@ -4555,7 +4561,7 @@ async function syncFromSupabase(){
       if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
     }
     await syncTrabajosDelDia();
-    renderToday(); renderDashboard();
+    renderToday(); renderDashboard(); renderRoute();
     // ⚠ IMPORTANTE: sin esto, un empleado que abre la app DESPUÉS de que
     // ya le asignaron una tarea (no en el momento) nunca veía el
     // resultado de esta primera sincronización — la pantalla se pintaba
@@ -4604,8 +4610,20 @@ async function syncTrabajosDelDia(){
   // entradas que YA estaban sincronizadas (tienen supabase_id) pero
   // dejaron de existir en Supabase. Las recién creadas sin supabase_id
   // todavía se dejan intactas — no se tocan hasta que terminen de subir.
+  //
+  // ⚠ BLINDAJE ADICIONAL: si la respuesta de Supabase viene sospechosamente
+  // incompleta (ej. un corte de red pasajero justo al volver de otra app
+  // como Google Maps), NO se sacan las tareas ya sincronizadas — evita
+  // perderlas por un problema de conexión momentáneo en vez de un
+  // borrado real.
   const validIds = new Set(trabajos.map(t=>t.id));
-  schedule[TODAY_KEY] = schedule[TODAY_KEY].filter(j => !j.supabase_id || validIds.has(j.supabase_id));
+  const yaSincronizadas = schedule[TODAY_KEY].filter(j=>j.supabase_id).length;
+  const respuestaConfiable = trabajos.length > 0 && trabajos.length >= yaSincronizadas * 0.5;
+  if(respuestaConfiable || yaSincronizadas === 0){
+    schedule[TODAY_KEY] = schedule[TODAY_KEY].filter(j => !j.supabase_id || validIds.has(j.supabase_id));
+  } else {
+    console.warn('[syncTrabajosDelDia] Respuesta sospechosa ('+trabajos.length+' de '+yaSincronizadas+' esperadas) — se omite la limpieza esta vez');
+  }
 
   // DIAGNÓSTICO TEMPORAL (solo empleado): ver cuántos trabajos trajo la
   // consulta para hoy y cuántos coinciden con este usuario, para
@@ -4662,7 +4680,7 @@ function subscribeRealtime(){
   sb.channel('trabajos-rt').on('postgres_changes',{event:'*',schema:'public',table:'trabajos'},()=>{
     const prevCount=(schedule[TODAY_KEY]||[]).length;
     syncTrabajosDelDia().then(()=>{
-      renderToday();
+      renderToday(); renderRoute();
       if(currentUser?.rol==='empleado'){
         renderEmpleadoView();
         const newCount=(schedule[TODAY_KEY]||[]).length;
@@ -4682,7 +4700,7 @@ function subscribeRealtime(){
   sb.channel('asignaciones-rt').on('postgres_changes',{event:'*',schema:'public',table:'asignaciones'},()=>{
     const prevCount=(schedule[TODAY_KEY]||[]).length;
     syncTrabajosDelDia().then(()=>{
-      renderToday();
+      renderToday(); renderRoute();
       if(currentUser?.rol==='empleado'){
         renderEmpleadoView();
         const newCount=(schedule[TODAY_KEY]||[]).length;
