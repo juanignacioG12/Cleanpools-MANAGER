@@ -4621,34 +4621,32 @@ async function syncTrabajosDelDia(){
   if(!trabajos)return;
   if(!schedule[TODAY_KEY]) schedule[TODAY_KEY]=[];
 
-  // ⚠ IMPORTANTE: antes esto borraba TODO schedule[TODAY_KEY] antes de
-  // repoblar desde Supabase. Eso causaba que una tarea recién creada
-  // (todavía sin supabase_id, mientras el guardado a Supabase estaba en
-  // curso) desapareciera para siempre si llegaba un evento de realtime
-  // de cualquier otro cambio en 'trabajos' justo en ese momento.
-  // Ahora: se actualiza/agrega por comparación, y solo se sacan las
-  // entradas que YA estaban sincronizadas (tienen supabase_id) pero
-  // dejaron de existir en Supabase. Las recién creadas sin supabase_id
-  // todavía se dejan intactas — no se tocan hasta que terminen de subir.
-  //
-  // ⚠ BLINDAJE ADICIONAL: si la respuesta de Supabase viene sospechosamente
+  // ⚠ BLINDAJE: si la respuesta de Supabase viene sospechosamente
   // incompleta (ej. un corte de red pasajero justo al volver de otra app
-  // como Google Maps), NO se sacan las tareas ya sincronizadas — evita
-  // perderlas por un problema de conexión momentáneo en vez de un
+  // como Google Maps), NO se toca nada — evita perder tareas ya
+  // sincronizadas por un problema de conexión momentáneo en vez de un
   // borrado real.
-  const validIds = new Set(trabajos.map(t=>t.id));
   const yaSincronizadas = schedule[TODAY_KEY].filter(j=>j.supabase_id).length;
-  const respuestaConfiable = trabajos.length > 0 && trabajos.length >= yaSincronizadas * 0.5;
-  if(respuestaConfiable || yaSincronizadas === 0){
-    schedule[TODAY_KEY] = schedule[TODAY_KEY].filter(j => !j.supabase_id || validIds.has(j.supabase_id));
-  } else {
-    console.warn('[syncTrabajosDelDia] Respuesta sospechosa ('+trabajos.length+' de '+yaSincronizadas+' esperadas) — se omite la limpieza esta vez');
+  const respuestaConfiable = trabajos.length > 0 || yaSincronizadas === 0;
+  if(!respuestaConfiable){
+    console.warn('[syncTrabajosDelDia] Respuesta sospechosa (0 de '+yaSincronizadas+' esperadas) — se omite esta vez');
+    return;
   }
+
+  // ⚠ IMPORTANTE: en vez de "buscar y actualizar en el lugar" (frágil —
+  // podía duplicar o perder tareas si dos sincronizaciones se cruzaban en
+  // el tiempo), ahora se RECONSTRUYE la lista completa desde cero con lo
+  // que reporta Supabase, que es la fuente de verdad para todo lo que ya
+  // tiene supabase_id. Lo único que se conserva aparte son las tareas
+  // recién creadas en ESTE mismo dispositivo que todavía no terminaron de
+  // subir (sin supabase_id todavía) — nunca se tocan hasta que suban.
+  const pendientes = schedule[TODAY_KEY].filter(j=>!j.supabase_id);
 
   // DIAGNÓSTICO TEMPORAL (solo empleado): ver cuántos trabajos trajo la
   // consulta para hoy y cuántos coinciden con este usuario, para
   // encontrar dónde se corta la asignación.
   let _diagAsignados=0, _diagSinCliente=0;
+  const nuevas=[];
 
   trabajos.forEach(t=>{
     const cl=t.clientes;
@@ -4660,12 +4658,17 @@ async function syncTrabajosDelDia(){
     const asignado=t.asignaciones?.some(a=>a.user_id===currentUser?.id);
     if(asignado) _diagAsignados++;
     if(currentUser?.rol==='empleado'&&!asignado)return;
-    const data={clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
-      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]};
-    const existing = schedule[TODAY_KEY].find(j=>j.supabase_id===t.id);
-    if(existing) Object.assign(existing, data);
-    else schedule[TODAY_KEY].push({supabase_id:t.id, ...data});
+    nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
+      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]});
   });
+
+  // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
+  // entre medio), evitar el duplicado quedándose con la versión de Supabase.
+  const pendientesFiltradas = pendientes.filter(p=>
+    !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time)
+  );
+
+  schedule[TODAY_KEY] = [...nuevas, ...pendientesFiltradas];
 
   if(currentUser?.rol==='empleado'){
     _lastSyncDiag = {total: trabajos.length, asignados: _diagAsignados, sinCliente: _diagSinCliente, hora: new Date().toLocaleTimeString('es-AR')};
