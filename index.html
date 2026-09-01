@@ -1994,10 +1994,10 @@ function renderClients(list){
         <div style="font-size:9px;color:var(--text3)">$${(c.price/1000).toFixed(0)}K</div>
       </div>
       <div class="cr-actions">
-        <div class="cr-ico" onclick="editClient(${c.id})" title="Editar">
+        <div class="cr-ico" onclick="editClient('${c.supabase_id||c.id}')" title="Editar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </div>
-        <div class="cr-ico" onclick="confirmDeleteClient(${c.id})" title="Eliminar">
+        <div class="cr-ico" onclick="confirmDeleteClient('${c.supabase_id||c.id}')" title="Eliminar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6"/></svg>
         </div>
       </div>
@@ -2680,9 +2680,27 @@ function asDeleteClient(){
 
 // ── CONFIRM MODAL (generic) ──
 let confirmCtx=null;
+// Resuelve el id local ACTUAL de un cliente, sea que el llamador pase el
+// id de posición local (puede haber quedado viejo/desactualizado en una
+// tarjeta ya renderizada) o el identificador estable de Supabase (que
+// nunca cambia, y por eso es preferible siempre que esté disponible).
+function resolveClientId(param){
+  if(typeof param === 'string' && param.includes('-')){
+    return clients.findIndex(c=>c.supabase_id===param);
+  }
+  const n = Number(param);
+  return Number.isInteger(n) ? n : -1;
+}
+
 function confirmDeleteClient(clientId){
-  const c=clients[clientId];
-  confirmCtx={type:'client',id:clientId};
+  const id = resolveClientId(clientId);
+  const c=clients[id];
+  if(!c){
+    toast('⚠ Este cliente ya no existe — la lista se va a actualizar');
+    filterClients();
+    return;
+  }
+  confirmCtx={type:'client',id};
   document.getElementById('cf-title').textContent='¿Eliminar cliente?';
   document.getElementById('cf-text').textContent=c.n;
   document.getElementById('cf-sub').textContent='Se eliminará de la base de clientes y de todas las fechas programadas. Esta acción no se puede deshacer.';
@@ -3599,10 +3617,12 @@ function fabNewCliente(){
   resetClienteForm();
   openModal('cliente');
 }
-function editClient(id){
+function editClient(idParam){
+  const id = resolveClientId(idParam);
   const c=clients[id];
   if(!c||c.deleted){
-    alert('🔍 DEBUG editClient\nid pedido: '+id+'\ntotal clientes en memoria: '+clients.length+'\nclients['+id+'] existe: '+(!!c)+'\ndeleted: '+(c?c.deleted:'N/A'));
+    toast('⚠ Este cliente ya no existe — la lista se va a actualizar');
+    filterClients();
     return;
   }
   document.getElementById('nc-editid').value=id;
