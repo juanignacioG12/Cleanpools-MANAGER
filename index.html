@@ -4670,8 +4670,12 @@ async function syncTrabajosDelDia(){
 
   schedule[TODAY_KEY] = [...nuevas, ...pendientesFiltradas];
 
+  console.log('[DEBUG syncTrabajosDelDia]', 'trabajos fetched:', trabajos.length, 'nuevas:', nuevas.length, 'pendientes:', pendientesFiltradas.length, 'schedule[TODAY_KEY] final:', schedule[TODAY_KEY].length, 'rol:', currentUser?.rol, 'TODAY_KEY:', TODAY_KEY);
+
   if(currentUser?.rol==='empleado'){
     _lastSyncDiag = {total: trabajos.length, asignados: _diagAsignados, sinCliente: _diagSinCliente, hora: new Date().toLocaleTimeString('es-AR')};
+  } else {
+    toast('🔍 DEBUG: '+trabajos.length+' trabajos traídos, '+nuevas.length+' cargados, schedule final: '+schedule[TODAY_KEY].length);
   }
 }
 
