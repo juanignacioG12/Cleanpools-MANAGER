@@ -1850,15 +1850,8 @@ function buildRoute(){
 
 // ── TODAY (Today View, default startup) ──
 function jobsFor(dateKey){
-  const raw = schedule[dateKey]||[];
-  const mapped = raw.map((e,idx)=>({...e,idx,client:clients[e.clientId]}));
-  const result = mapped.filter(j=>j.client && !j.client.deleted);
-  if(dateKey===TODAY_KEY && raw.length>0 && result.length===0 && !window._jobsForDebugShown){
-    window._jobsForDebugShown = true;
-    const detalle = raw.map(e=>'clientId='+e.clientId+' → clients['+e.clientId+']='+(clients[e.clientId]?clients[e.clientId].n+(clients[e.clientId].deleted?' (ELIMINADO)':''):'NO EXISTE')).join('\n');
-    alert('🔍 DEBUG jobsFor\ntotal en schedule: '+raw.length+'\ntotal clients en memoria: '+clients.length+'\n\n'+detalle);
-  }
-  return result;
+  return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:clients[e.clientId]}))
+    .filter(j=>j.client && !j.client.deleted);
 }
 function statusBadge(st){
   if(st==='done')return '<span class="jcard-status st-done">Completado</span>';
@@ -4558,9 +4551,20 @@ async function syncFromSupabase(){
         // Buscar primero por supabase_id, luego por nombre normalizado
         let ex = clients.find(c=>c.supabase_id===sc.id);
         if(!ex) ex = clients.find(c=>!c.deleted && normName(c.n)===normName(sc.nombre));
-        const mp=mapSbCliente(sc);
-        if(ex){ Object.assign(ex,mp); ex.supabase_id=sc.id; }
-        else clients.push(mp);
+        if(ex){
+          // ⚠ CRÍTICO: mapSbCliente() SIEMPRE genera un id nuevo (para
+          // clientes recién vistos). Si este cliente YA existía, hay que
+          // conservar su id de posición actual — sobreescribirlo rompía
+          // la relación id=posición en el array para TODOS los clientes
+          // ya conocidos, en cada sincronización, causando "cliente no
+          // encontrado" en cascada a medida que pasaba el día.
+          const idPrevio = ex.id;
+          Object.assign(ex, mapSbCliente(sc));
+          ex.id = idPrevio;
+          ex.supabase_id = sc.id;
+        } else {
+          clients.push(mapSbCliente(sc));
+        }
       });
       // Reconciliar: un cliente local con supabase_id que YA NO aparece en
       // Supabase fue eliminado ahí (ej. la limpieza de datos de prueba de
@@ -4677,12 +4681,8 @@ async function syncTrabajosDelDia(){
 
   schedule[TODAY_KEY] = [...nuevas, ...pendientesFiltradas];
 
-  console.log('[DEBUG syncTrabajosDelDia]', 'trabajos fetched:', trabajos.length, 'nuevas:', nuevas.length, 'pendientes:', pendientesFiltradas.length, 'schedule[TODAY_KEY] final:', schedule[TODAY_KEY].length, 'rol:', currentUser?.rol, 'TODAY_KEY:', TODAY_KEY);
-
   if(currentUser?.rol==='empleado'){
     _lastSyncDiag = {total: trabajos.length, asignados: _diagAsignados, sinCliente: _diagSinCliente, hora: new Date().toLocaleTimeString('es-AR')};
-  } else {
-    toast('🔍 DEBUG: '+trabajos.length+' trabajos traídos, '+nuevas.length+' cargados, schedule final: '+schedule[TODAY_KEY].length);
   }
 }
 
@@ -4703,11 +4703,16 @@ function subscribeRealtime(){
       }
     }
     else{
-      const mp=mapSbCliente(nr);
       let ex=clients.find(c=>c.supabase_id===nr.id);
       if(!ex) ex=clients.find(c=>!c.deleted&&normName(c.n)===normName(nr.nombre));
-      if(ex){Object.assign(ex,mp);ex.supabase_id=nr.id;}
-      else{mp.id=nextClientId++;clients.push(mp);}
+      if(ex){
+        const idPrevio = ex.id;
+        Object.assign(ex, mapSbCliente(nr));
+        ex.id = idPrevio;
+        ex.supabase_id = nr.id;
+      } else {
+        clients.push(mapSbCliente(nr));
+      }
     }
     filterClients(); refreshClientDatalist(); if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
   }).subscribe();
