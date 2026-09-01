@@ -1850,8 +1850,15 @@ function buildRoute(){
 
 // ── TODAY (Today View, default startup) ──
 function jobsFor(dateKey){
-  return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:clients[e.clientId]}))
-    .filter(j=>j.client && !j.client.deleted);
+  const raw = schedule[dateKey]||[];
+  const mapped = raw.map((e,idx)=>({...e,idx,client:clients[e.clientId]}));
+  const result = mapped.filter(j=>j.client && !j.client.deleted);
+  if(dateKey===TODAY_KEY && raw.length>0 && result.length===0 && !window._jobsForDebugShown){
+    window._jobsForDebugShown = true;
+    const detalle = raw.map(e=>'clientId='+e.clientId+' → clients['+e.clientId+']='+(clients[e.clientId]?clients[e.clientId].n+(clients[e.clientId].deleted?' (ELIMINADO)':''):'NO EXISTE')).join('\n');
+    alert('🔍 DEBUG jobsFor\ntotal en schedule: '+raw.length+'\ntotal clients en memoria: '+clients.length+'\n\n'+detalle);
+  }
+  return result;
 }
 function statusBadge(st){
   if(st==='done')return '<span class="jcard-status st-done">Completado</span>';
