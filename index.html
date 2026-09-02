@@ -1905,8 +1905,8 @@ function toggleWork(dateKey,idx){
   if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
   if(e.supabase_id){
     sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id)
-      .then(({error})=>{ if(error) queueSync('job_status',{dateKey,idx,status:e.status}); })
-      .catch(()=>queueSync('job_status',{dateKey,idx,status:e.status}));
+      .then(({error})=>{ if(error) queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status}); })
+      .catch(()=>queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status}));
   } else {
     queueSync('job_status',{dateKey,idx,status:e.status});
   }
@@ -2151,8 +2151,6 @@ function navUrlWeb(c){
 function goNavigate(lat,lng){
   const c={lat,lng};
   if(!validCoord(lat,lng)){toast('⚠ Este cliente no tiene coordenadas válidas');return;}
-  console.log('[DEBUG goNavigate]', lat, lng, navUrl(c));
-  alert('🔍 DEBUG - link generado:\n\n'+navUrl(c));
   const plat=detectPlatform();
   if(plat==='web'){ window.open(navUrlWeb(c),'_blank'); return; }
   const deep=navUrl(c);
@@ -2406,8 +2404,6 @@ function comenzarRecorrido(){
       `&waypoints=${encodeURIComponent(waypoints)}`+
       `&travelmode=driving`;
 
-    console.log('[DEBUG recorrido URL]', url);
-    alert('🔍 DEBUG - link generado:\n\n'+url);
     window.open(url, '_blank');
     toast('🗺 Abriendo Google Maps con '+jobs.length+' paradas...');
   } else {
@@ -3843,8 +3839,13 @@ async function flushSyncQueue(){
 
 async function runSyncQueueItem(item){
   if(item.type==='job_status'){
-    const {dateKey, idx, status} = item.payload;
-    const job = schedule[dateKey]?.[idx];
+    const {dateKey, idx, supabaseId, status} = item.payload;
+    // Preferir el identificador estable de Supabase (no cambia aunque la
+    // agenda del día se reordene entre medio); usar la posición (idx)
+    // solo como respaldo para tareas que todavía no tenían supabase_id
+    // en el momento de encolarse.
+    let job = supabaseId ? (schedule[dateKey]||[]).find(j=>j.supabase_id===supabaseId) : null;
+    if(!job) job = schedule[dateKey]?.[idx];
     if(!job) return; // el trabajo ya no existe (borrado) — descartar silenciosamente
     if(job.supabase_id){
       const {error} = await sb.from('trabajos').update({status: status||job.status}).eq('id',job.supabase_id);
@@ -4873,9 +4874,9 @@ async function empToggleDone(dateKey,idx){
   if(e.supabase_id){
     try{
       const {error} = await sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id);
-      if(error) queueSync('job_status',{dateKey,idx,status:e.status});
+      if(error) queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status});
     }catch(err){
-      queueSync('job_status',{dateKey,idx,status:e.status});
+      queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status});
     }
   } else {
     queueSync('job_status',{dateKey,idx,status:e.status});
