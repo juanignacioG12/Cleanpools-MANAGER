@@ -4078,16 +4078,28 @@ async function dbLoad(){
 
   if(!data) return; // primera vez — no hay datos
 
-  // 1) Restaurar clientes guardados localmente (patch por id)
+  // 1) Restaurar clientes guardados localmente
+  // ⚠ CRÍTICO: el id de cada cliente debe coincidir con la posición REAL
+  // donde queda insertado en el array en este momento, no con el valor
+  // que tenía guardado de una sesión anterior. Si el orden de
+  // restauración no coincide exactamente con el que tenía al guardarse,
+  // conservar el id viejo rompe la relación id=posición que usa toda la
+  // app para encontrar clientes — esto causaba "cliente no encontrado"
+  // para clientes recién creados que no habían llegado a sincronizarse
+  // con Supabase antes de cerrar la app.
+  // Como este array siempre arranca vacío antes de este bucle, cada
+  // entrada es necesariamente nueva (no hace falta buscar duplicados
+  // acá) — y se guarda un mapa id-viejo→id-nuevo para poder corregir
+  // también las referencias en la agenda de todos los días.
+  const _clientIdRemap = {};
   if(data.clients && data.clients.length){
     data.clients.forEach(sc => {
-      const existing = clients.find(c => c.id === sc.id);
-      if(existing){
-        Object.assign(existing, sc);
-      } else {
-        clients.push(sc);
-        if(sc.id >= nextClientId) nextClientId = sc.id + 1;
-      }
+      const idViejo = sc.id;
+      const idReal = clients.length;
+      sc.id = idReal;
+      clients.push(sc);
+      if(idReal >= nextClientId) nextClientId = idReal + 1;
+      if(idViejo !== idReal) _clientIdRemap[idViejo] = idReal;
     });
   }
 
@@ -4096,7 +4108,13 @@ async function dbLoad(){
     Object.keys(data.schedule).forEach(k => {
       // Siempre restaurar días guardados (sobreescribe demos del seedDay)
       if(data.schedule[k] && data.schedule[k].length > 0){
-        schedule[k] = data.schedule[k];
+        // Corregir las referencias de cliente si se reasignaron ids arriba
+        schedule[k] = data.schedule[k].map(e => {
+          if(_clientIdRemap.hasOwnProperty(e.clientId)){
+            return {...e, clientId: _clientIdRemap[e.clientId]};
+          }
+          return e;
+        });
       }
     });
   }
