@@ -1455,7 +1455,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
     <div class="mfield">
       <div class="mlabel">Horario</div>
       <div class="time-row">
-        <input class="minput" id="nw-time-start" type="time" value="09:00" placeholder="Inicio">
+        <input class="minput" id="nw-time-start" type="time" value="09:00" placeholder="Inicio" oninput="nwUpdateEndTime()">
         <input class="minput" id="nw-time-end" type="time" value="10:00" placeholder="Fin">
       </div>
     </div>
@@ -2006,11 +2006,21 @@ function renderClients(list){
 function filterClients(){
   const q=document.getElementById('search-in').value.toLowerCase();
   let list=clients.filter(c=>!c.deleted);
-  if(sfil)list=list.filter(c=>c.status===sfil);
+  if(sfil==='sinGPS') list=list.filter(c=>!validCoord(c.lat,c.lng));
+  else if(sfil) list=list.filter(c=>c.status===sfil);
   if(q)list=list.filter(c=>c.n.toLowerCase().includes(q)||c.zone.toLowerCase().includes(q));
   renderClients(list);
 }
 function filterByStatus(s){sfil=s;filterClients();}
+// Corrección 4: ir directo a la lista de clientes SIN coordenadas GPS,
+// en vez de abrir la lista completa de todos los clientes.
+function showClientsSinGPS(){
+  showPage('clientes',null);
+  sfil='sinGPS';
+  const si=document.getElementById('search-in'); if(si) si.value='';
+  filterClients();
+  toast('📍 Mostrando solo clientes sin ubicación');
+}
 
 
 // ── ORDENAMIENTO INTELIGENTE DE RECORRIDO (Problema 4) ──
@@ -2636,17 +2646,33 @@ function saveNotes(){
   toast('✓ Notas guardadas');
   asCtx=null;
 }
-function asRemoveFromDay(){
+async function asRemoveFromDay(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
   const c=clients[e.clientId];
+  const supabaseId = e.supabase_id;
   schedule[asCtx.dateKey].splice(asCtx.idx,1);
   dbSave();
   closeModal('actions');
   renderCalendar();
   renderToday();
-  toast('✓ '+c.n+' quitado de este día (sigue en tu base de clientes)');
+  renderRoute();
+  toast('✓ Tarea eliminada');
   asCtx=null;
+  // ⚠ IMPORTANTE: sin borrar también en Supabase, la tarea "eliminada"
+  // volvía a aparecer en la próxima sincronización (la próxima vez que se
+  // abre la app), porque syncTrabajosDelDia() la seguía trayendo de la
+  // base de datos, ya que ahí nunca se había borrado.
+  if(supabaseId){
+    try{
+      await sb.from('asignaciones').delete().eq('trabajo_id',supabaseId);
+      const {error}=await sb.from('trabajos').delete().eq('id',supabaseId);
+      if(error) throw error;
+    }catch(err){
+      console.warn('[SB] error al eliminar trabajo:',err);
+      toast('⚠ Se quitó acá, pero no se pudo borrar en la nube: '+(err?.message||err));
+    }
+  }
 }
 function asRemoveRecurrenceFuture(){
   if(!asCtx)return;
@@ -2671,13 +2697,6 @@ function asRemoveRecurrenceFuture(){
   toast('✓ Quitadas '+removed+' fechas futuras de '+c.n);
   asCtx=null;
 }
-function asDeleteClient(){
-  if(!asCtx)return;
-  const e=schedule[asCtx.dateKey][asCtx.idx];
-  closeModal('actions');
-  confirmDeleteClient(e.clientId);
-}
-
 // ── CONFIRM MODAL (generic) ──
 let confirmCtx=null;
 // Resuelve el id local ACTUAL de un cliente, sea que el llamador pase el
@@ -2758,6 +2777,7 @@ function resetWorkForm(){
   const nwTo=document.getElementById('nw-date-to'); if(nwTo) nwTo.value='';
   document.getElementById('nw-time-start').value='09:00';
   document.getElementById('nw-time-end').value='10:00';
+  nwUpdateEndTime();
   document.getElementById('nw-notes').value='';
   document.getElementById('nw-recur').selectedIndex=0;
   document.getElementById('nw-recur-n').value='';
@@ -2817,9 +2837,25 @@ function nwClientPick(){
     else document.getElementById('nw-svc-custom').style.display='none';
   }
 }
+// Duración estándar por tipo de servicio (horas). Servicios no listados
+// (ej. "Personalizado…") no tocan la hora de fin — el usuario la pone a mano.
+const SERVICE_DURATIONS = { 'Mantenimiento':1, 'Limpieza profunda':5, 'Servicio de filtrado':1 };
+
+function nwUpdateEndTime(){
+  const svc = document.getElementById('nw-svc').value;
+  const hours = SERVICE_DURATIONS[svc];
+  if(hours==null) return; // servicio personalizado: no se toca
+  const startVal = document.getElementById('nw-time-start').value;
+  if(!startVal) return;
+  const [h,m] = startVal.split(':').map(Number);
+  const endH = (h+hours) % 24;
+  document.getElementById('nw-time-end').value = pad2(endH)+':'+pad2(m);
+}
+
 function nwServiceChange(){
   const v=document.getElementById('nw-svc').value;
   document.getElementById('nw-svc-custom').style.display = (v==='custom')?'block':'none';
+  nwUpdateEndTime();
 }
 function nwRecurChange(){
   const v=document.getElementById('nw-recur').value;
@@ -4238,7 +4274,7 @@ function renderOportunidades(){
   // 2) Clientes sin coordenadas GPS
   const sinGPS = clients.filter(c=>!c.deleted && !validCoord(c.lat,c.lng));
   if(sinGPS.length){
-    ops.push({icon:'📍',label:sinGPS.length+' clientes sin ubicación GPS',sub:'La navegación y rutas no funcionarán correctamente',pill:'p-teal',action:"showPage('clientes',null)",btn:'Revisar'});
+    ops.push({icon:'📍',label:sinGPS.length+' clientes sin ubicación GPS',sub:'La navegación y rutas no funcionarán correctamente',pill:'p-teal',action:"showClientsSinGPS()",btn:'Revisar'});
   }
 
   // 3) Trabajos de hoy sin completar ya pasada la hora
@@ -5881,17 +5917,13 @@ function exportToGoogleCalendar(dateKey){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Editar notas
     </div>
-    <div class="asheet-item" onclick="asRemoveFromDay()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
-      Quitar del día
+    <div class="asheet-item danger" onclick="asRemoveFromDay()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6"/></svg>
+      Eliminar tarea
     </div>
     <div class="asheet-item danger" id="as-remove-future" style="display:none" onclick="asRemoveRecurrenceFuture()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/></svg>
       Quitar esta y futuras (recurrencia)
-    </div>
-    <div class="asheet-item danger" onclick="asDeleteClient()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6"/></svg>
-      Eliminar cliente
     </div>
     <div class="mactions">
       <div class="bcancel" style="grid-column:span 2" onclick="closeModal('actions')">Cerrar</div>
