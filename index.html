@@ -2496,6 +2496,16 @@ function calShift(delta){
   renderCalendar();
 }
 function renderCalendar(){
+  renderCalendarPaint();
+  // Traer el mes visible completo, fresco desde Supabase, y repintar
+  // cuando llegue — antes los puntitos del calendario solo se
+  // actualizaban si entrabas a cada día puntual.
+  const y=calYear, m=calMonth;
+  syncTrabajosForMonth(y,m).then(()=>{
+    if(calYear===y && calMonth===m) renderCalendarPaint();
+  }).catch(()=>{});
+}
+function renderCalendarPaint(){
   document.getElementById('cal-title').textContent=MONTH_NAMES[calMonth]+' '+calYear;
   const first=new Date(calYear,calMonth,1);
   const startDow=first.getDay();
@@ -4692,6 +4702,52 @@ function mapSbCliente(sc){
     notes:sc.notas||'',googleMapsUrl:sc.google_maps_url||'',status:sc.status||'activo',deleted:sc.deleted||false,
     fechaCreacion:sc.created_at,av:sc.nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2),
     avc:AV[id%AV.length],last:'Sin registro',id,_synced:true};
+}
+
+// Trae y reconstruye la agenda de UN MES completo desde Supabase, en una
+// sola consulta (no día por día). Se usa para que el calendario muestre
+// los puntitos correctos apenas se abre, sin tener que entrar a cada día
+// para que se actualice.
+async function syncTrabajosForMonth(year, month){
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const first = year+'-'+pad2(month+1)+'-01';
+  const last  = year+'-'+pad2(month+1)+'-'+pad2(daysInMonth);
+  const {data:trabajos, error} = await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').gte('fecha',first).lte('fecha',last);
+  if(error){ console.warn('[syncTrabajosForMonth] error:', error); return; }
+  if(!trabajos) return;
+  const porFecha = {};
+  trabajos.forEach(t=>{ (porFecha[t.fecha] = porFecha[t.fecha]||[]).push(t); });
+  for(let day=1; day<=daysInMonth; day++){
+    const key = year+'-'+pad2(month+1)+'-'+pad2(day);
+    _mergeTrabajosIntoSchedule(key, porFecha[key]||[]);
+  }
+}
+
+// Lógica de mezcla compartida entre syncTrabajosForDate y
+// syncTrabajosForMonth: reconstruye schedule[dateKey] a partir de una
+// lista de trabajos ya obtenida de Supabase para ese día específico.
+function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
+  if(!schedule[dateKey]) schedule[dateKey]=[];
+  const yaSincronizadas = schedule[dateKey].filter(j=>j.supabase_id).length;
+  const respuestaConfiable = trabajosDelDia.length > 0 || yaSincronizadas === 0;
+  if(!respuestaConfiable) return;
+
+  const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
+  const nuevas=[];
+  trabajosDelDia.forEach(t=>{
+    const cl=t.clientes;
+    if(!cl||cl.deleted) return;
+    let lc = clients.find(c=>c.supabase_id===cl.id);
+    if(!lc) lc = clients.find(c=>!c.deleted && normName(c.n)===normName(cl.nombre));
+    if(!lc){ lc=mapSbCliente(cl); clients.push(lc); }
+    else if(!lc.supabase_id) lc.supabase_id=cl.id;
+    const asignado=t.asignaciones?.some(a=>a.user_id===currentUser?.id);
+    if(currentUser?.rol==='empleado'&&!asignado)return;
+    nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
+      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]});
+  });
+  const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
+  schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
 }
 
 // Trae y reconstruye la agenda de UN día puntual desde Supabase.
