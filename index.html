@@ -2111,6 +2111,12 @@ function routeShiftDay(delta){
   const [y,m,d]=routeDate.split('-').map(Number);
   routeDate=dkey(addDays(new Date(y,m-1,d),delta));
   renderRoute();
+  // Traer la versión fresca de Supabase para este día y repintar cuando
+  // llegue — antes solo "hoy" se refrescaba así.
+  const dateAlAbrir = routeDate;
+  syncTrabajosForDate(dateAlAbrir).then(()=>{
+    if(routeDate===dateAlAbrir) renderRoute();
+  }).catch(()=>{});
 }
 // ── Validación de coordenadas (fuente de verdad GPS) ──
 function validCoord(lat,lng){
@@ -2524,6 +2530,17 @@ function fmtAgendaDate(key){
   return dows[dt.getDay()]+' '+d+' de '+MONTH_NAMES[m-1];
 }
 function renderAgendaList(key){
+  renderAgendaListPaint(key);
+  // Traer la versión fresca de Supabase para ESTE día específico y
+  // repintar cuando llegue — antes solo "hoy" se refrescaba así; el
+  // resto de los días dependía 100% de lo guardado en el teléfono, que
+  // se pierde si se borran datos de navegación.
+  syncTrabajosForDate(key).then(()=>{
+    // Repintar solo si seguimos mirando la misma fecha
+    if(selectedDate===key || (key===TODAY_KEY && !selectedDate)) renderAgendaListPaint(key);
+  }).catch(()=>{});
+}
+function renderAgendaListPaint(key){
   const dateTxt = fmtAgendaDate(key)+(key===TODAY_KEY?' · Hoy':'');
   // Update both pg-agenda and dashboard inline calendar
   const agDate = document.getElementById('agenda-date');
@@ -4677,25 +4694,30 @@ function mapSbCliente(sc){
     avc:AV[id%AV.length],last:'Sin registro',id,_synced:true};
 }
 
-async function syncTrabajosDelDia(){
-  const {data:trabajos,error:errTrabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',TODAY_KEY);
+// Trae y reconstruye la agenda de UN día puntual desde Supabase.
+// Generalización de la versión que antes solo funcionaba para "hoy" —
+// ahora cualquier día (Agenda, Ruta en otra fecha) puede refrescarse
+// contra Supabase, no solo depender de lo que haya quedado guardado en
+// el teléfono (que se pierde si se borran datos de navegación).
+async function syncTrabajosForDate(dateKey){
+  const {data:trabajos,error:errTrabajos}=await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').eq('fecha',dateKey);
   if(errTrabajos){
-    console.warn('[syncTrabajosDelDia] error consulta:', errTrabajos);
-    if(currentUser?.rol==='empleado') toast('⚠ Error trayendo trabajos: '+errTrabajos.message);
+    console.warn('[syncTrabajosForDate] error consulta:', errTrabajos);
+    if(dateKey===TODAY_KEY && currentUser?.rol==='empleado') toast('⚠ Error trayendo trabajos: '+errTrabajos.message);
     return;
   }
   if(!trabajos)return;
-  if(!schedule[TODAY_KEY]) schedule[TODAY_KEY]=[];
+  if(!schedule[dateKey]) schedule[dateKey]=[];
 
   // ⚠ BLINDAJE: si la respuesta de Supabase viene sospechosamente
   // incompleta (ej. un corte de red pasajero justo al volver de otra app
   // como Google Maps), NO se toca nada — evita perder tareas ya
   // sincronizadas por un problema de conexión momentáneo en vez de un
   // borrado real.
-  const yaSincronizadas = schedule[TODAY_KEY].filter(j=>j.supabase_id).length;
+  const yaSincronizadas = schedule[dateKey].filter(j=>j.supabase_id).length;
   const respuestaConfiable = trabajos.length > 0 || yaSincronizadas === 0;
   if(!respuestaConfiable){
-    console.warn('[syncTrabajosDelDia] Respuesta sospechosa (0 de '+yaSincronizadas+' esperadas) — se omite esta vez');
+    console.warn('[syncTrabajosForDate] Respuesta sospechosa (0 de '+yaSincronizadas+' esperadas) para '+dateKey+' — se omite esta vez');
     return;
   }
 
@@ -4706,11 +4728,8 @@ async function syncTrabajosDelDia(){
   // tiene supabase_id. Lo único que se conserva aparte son las tareas
   // recién creadas en ESTE mismo dispositivo que todavía no terminaron de
   // subir (sin supabase_id todavía) — nunca se tocan hasta que suban.
-  const pendientes = schedule[TODAY_KEY].filter(j=>!j.supabase_id);
+  const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
 
-  // DIAGNÓSTICO TEMPORAL (solo empleado): ver cuántos trabajos trajo la
-  // consulta para hoy y cuántos coinciden con este usuario, para
-  // encontrar dónde se corta la asignación.
   let _diagAsignados=0, _diagSinCliente=0;
   const nuevas=[];
 
@@ -4734,11 +4753,16 @@ async function syncTrabajosDelDia(){
     !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time)
   );
 
-  schedule[TODAY_KEY] = [...nuevas, ...pendientesFiltradas];
+  schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
 
-  if(currentUser?.rol==='empleado'){
+  if(dateKey===TODAY_KEY && currentUser?.rol==='empleado'){
     _lastSyncDiag = {total: trabajos.length, asignados: _diagAsignados, sinCliente: _diagSinCliente, hora: new Date().toLocaleTimeString('es-AR')};
   }
+}
+
+// Mantiene el nombre viejo por compatibilidad con el resto del código.
+async function syncTrabajosDelDia(){
+  await syncTrabajosForDate(TODAY_KEY);
 }
 
 function subscribeRealtime(){
