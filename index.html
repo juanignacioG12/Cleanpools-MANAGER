@@ -924,6 +924,74 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 /* route optimization badge */
 .opt-badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(78,216,160,.15);color:var(--green);margin-left:6px}
 
+/* ════════════════════════════════════════════
+   MODO ESCRITORIO / PC (solo estilos — no toca
+   estructura HTML ni lógica de datos)
+   ════════════════════════════════════════════ */
+@media (min-width: 820px){
+  body{
+    background: var(--bg2);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #app{
+    max-width: 920px;
+    width: 92vw;
+    height: 92vh; height: 92dvh;
+    margin: 0 auto;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px var(--border);
+    overflow: hidden;
+  }
+  /* Splash y login también centrados como ventana, no pantalla completa.
+     inset:auto resetea los 4 bordes que fija la regla original (inset:0)
+     antes de centrar con left/top/transform — si no, quedaba una caja
+     deformada por el conflicto entre ambas reglas. */
+  #splash, #login-screen{
+    inset:auto;
+    max-width: 460px; width: 92vw;
+    height: 640px; max-height: 92vh;
+    margin: 0 auto;
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.45);
+    left:50%; top:50%; transform:translate(-50%,-50%);
+  }
+  /* Barra de navegación: íconos y texto lado a lado, más cómoda para mouse */
+  .bnav{ padding-bottom:10px; }
+  .bni{
+    flex-direction:row; gap:7px;
+    font-size:12px; padding:12px 8px;
+  }
+  .bni svg{ width:18px; height:18px; }
+  .bni:hover{ color:var(--c6); cursor:pointer; }
+
+  /* Lista de clientes en 2 columnas cuando hay espacio */
+  #client-list{
+    display:grid; grid-template-columns:1fr 1fr; gap:0;
+  }
+  #client-list .cr{ border-right:1px solid var(--border); }
+  #client-list .cr:nth-child(2n){ border-right:none; }
+
+  /* Modales: ancho fijo cómodo en vez de ocupar toda la pantalla */
+  .modal-box{ max-width:440px; margin:0 auto; }
+
+  /* Botones y filas clicables: cursor de mano para mouse */
+  .cr-ico, .bconfirm, .fab-opt, .pill, .cal-day, .jcard, .nota-card,
+  .section-tab-btn, .emp-btn, [onclick]{ cursor:pointer; }
+
+  /* FAB (botón +) y aviso emergente: en mobile usan position:fixed
+     (relativo a toda la pantalla), lo cual está bien porque #app ocupa
+     toda la pantalla ahí. En PC, #app es una ventana centrada más chica
+     que la pantalla — así que estos dos se anclan a esa ventana en vez
+     de flotar sueltos en el fondo. */
+  #fab-btn{ position:absolute; right:24px; bottom:96px; }
+  #fab-menu{ position:absolute; right:24px; bottom:calc(96px + 56px + 16px); }
+  #toast{ position:absolute; top:16px; }
+}
+
+/* Pantallas muy anchas: un poco más de aire, sin exagerar */
+@media (min-width: 1300px){
+  #app{ max-width: 1040px; }
+}
 </style>
 </head>
 <body>
@@ -2633,7 +2701,8 @@ function saveResched(){
   const newDate=document.getElementById('rs-date').value;
   const newTime=document.getElementById('rs-time').value;
   if(!newDate){toast('⚠ Elegí una fecha');return;}
-  const [e]=schedule[asCtx.dateKey].splice(asCtx.idx,1);
+  const oldDate=asCtx.dateKey;
+  const [e]=schedule[oldDate].splice(asCtx.idx,1);
   e.time=newTime;
   if(!schedule[newDate]) schedule[newDate]=[];
   schedule[newDate].push(e);
@@ -2647,6 +2716,15 @@ function saveResched(){
   renderCalendar();
   renderToday();
   toast('✓ Reprogramado');
+  // ⚠ IMPORTANTE: sin avisarle a Supabase el cambio de fecha, la tarea
+  // seguía existiendo ahí con la fecha VIEJA — la próxima sincronización
+  // la volvía a traer en el día anterior, generando un duplicado (la
+  // movida acá + la que "resucitaba" en la fecha vieja).
+  if(e.supabase_id){
+    sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',e.supabase_id)
+      .then(({error})=>{ if(error) queueSync('reschedule',{supabaseId:e.supabase_id,newDate,newTime}); })
+      .catch(()=>queueSync('reschedule',{supabaseId:e.supabase_id,newDate,newTime}));
+  }
   asCtx=null;
 }
 function asNotes(){
@@ -2752,6 +2830,7 @@ function confirmYes(){
   if(!confirmCtx)return;
   if(confirmCtx.type==='client'){
     const id=confirmCtx.id;
+    const c=clients[id];
     clients[id].deleted=true;
     // remove from all schedule days
     Object.keys(schedule).forEach(k=>{
@@ -2763,6 +2842,14 @@ function confirmYes(){
     if(mapInit) renderMarkers(clients.filter(c=>!c.deleted));
     dbSaveAndRefresh();
     toast('✓ Cliente eliminado');
+    // ⚠ IMPORTANTE: sin avisarle a Supabase, el cliente "eliminado" seguía
+    // activo en la base — podía reaparecer en otro dispositivo, o en este
+    // mismo si se reseteaban los datos locales.
+    if(c?.supabase_id){
+      sb.from('clientes').update({deleted:true}).eq('id',c.supabase_id)
+        .then(({error})=>{ if(error) queueSync('save_cliente',{clientId:id}); })
+        .catch(()=>queueSync('save_cliente',{clientId:id}));
+    }
   }
   closeModal('confirm');
   closeModal('cliente');
@@ -3757,19 +3844,23 @@ async function saveCliente(){
 
   if(editId!==''){
     const c=clients[parseInt(editId)];
-    // Detección de conflicto: si otro dispositivo modificó este cliente
-    // mientras lo tenías abierto para editar, avisar antes de pisarlo.
+    // ⚠ La verificación de conflicto (¿otro dispositivo lo modificó
+    // mientras lo editabas?) ahora corre en SEGUNDO PLANO, después de
+    // aplicar el cambio — antes se esperaba una consulta a Supabase antes
+    // de actualizar la pantalla, lo cual se sentía como una demora al
+    // guardar. Si se detecta un conflicto, se avisa con un cartel, sin
+    // bloquear el guardado.
     if(c.supabase_id && _editingClientSnapshot && navigator.onLine){
-      try{
-        const {data:remote} = await sb.from('clientes').select('nombre,zona,servicio,precio,telefono,direccion,notas').eq('id',c.supabase_id).single();
-        if(remote){
+      const snapshotAlEditar = _editingClientSnapshot;
+      const supabaseIdAlEditar = c.supabase_id;
+      sb.from('clientes').select('nombre,zona,servicio,precio,telefono,direccion,notas').eq('id',supabaseIdAlEditar).single()
+        .then(({data:remote})=>{
+          if(!remote) return;
           const remoteSnapshot = JSON.stringify({n:remote.nombre,zone:remote.zona,service:remote.servicio,price:remote.precio,phone:remote.telefono,address:remote.direccion,notes:remote.notas});
-          if(remoteSnapshot !== _editingClientSnapshot){
-            const seguir = confirm('⚠ Este cliente fue modificado por otro dispositivo mientras lo editabas.\n\n¿Guardar igual tu versión? (se va a pisar el otro cambio)');
-            if(!seguir){ toast('Edición cancelada'); return; }
+          if(remoteSnapshot !== snapshotAlEditar){
+            toast('⚠ Este cliente también fue modificado por otro dispositivo — revisalo por las dudas');
           }
-        }
-      }catch(e){ /* sin conexión o error: continuar igual, no bloquear al usuario */ }
+        }).catch(()=>{});
     }
     _editingClientSnapshot = null;
     c.n=nombre;c.zone=zona;c.service=svc;c.price=precio;c.phone=tel;c.address=dir||zona;c.notes=notas;
@@ -3886,6 +3977,10 @@ async function runSyncQueueItem(item){
     const cl = clients[item.payload.clientId];
     if(!cl) return; // cliente ya no existe
     await saveClienteToSupabase(cl);
+  } else if(item.type==='reschedule'){
+    const {supabaseId,newDate,newTime} = item.payload;
+    const {error} = await sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',supabaseId);
+    if(error) throw error;
   }
 }
 
