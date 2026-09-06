@@ -4324,6 +4324,25 @@ function toggleTheme(){
 // ── FINANZAS DINÁMICAS (BUG-05) ──
 // ── DASHBOARD DINÁMICO (BUG-01, BUG-04, BUG-15) ──
 function renderDashboard(){
+  renderDashboardPaint();
+  // Traer fresco de Supabase el rango que necesita el cálculo (semana +
+  // mes actual) y repintar cuando llegue — antes el dashboard calculaba
+  // solo con lo que ya estuviera cargado en memoria en ese momento, que
+  // podía estar incompleto si no se había visitado el calendario en esa
+  // sesión (por eso a veces "no salía la cuenta" aunque las tareas
+  // existieran y se vieran bien en Ruta/Agenda).
+  const now = new Date();
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1)); weekStart.setHours(0,0,0,0);
+  const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0);
+  const rangeStart = weekStart < monthStart ? weekStart : monthStart;
+  const rangeEnd   = weekEnd > monthEnd ? weekEnd : monthEnd;
+  syncTrabajosForRange(dkey(rangeStart), dkey(rangeEnd)).then(()=>{
+    renderDashboardPaint();
+  }).catch(()=>{});
+}
+function renderDashboardPaint(){
   const now = new Date();
   const activeClients = clients.filter(c=>!c.deleted);
   const activeCount   = activeClients.length;
@@ -4803,19 +4822,30 @@ function mapSbCliente(sc){
 // sola consulta (no día por día). Se usa para que el calendario muestre
 // los puntitos correctos apenas se abre, sin tener que entrar a cada día
 // para que se actualice.
+// Trae y reconstruye la agenda de un RANGO de fechas cualquiera desde
+// Supabase, en una sola consulta. Generalización de syncTrabajosForMonth
+// para cubrir rangos que no coinciden con un mes calendario exacto (ej.
+// la semana actual, que puede empezar en un mes y terminar en otro).
+async function syncTrabajosForRange(startKey, endKey){
+  const {data:trabajos, error} = await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').gte('fecha',startKey).lte('fecha',endKey);
+  if(error){ console.warn('[syncTrabajosForRange] error:', error); return; }
+  if(!trabajos) return;
+  const porFecha = {};
+  trabajos.forEach(t=>{ (porFecha[t.fecha] = porFecha[t.fecha]||[]).push(t); });
+  let cur = new Date(startKey+'T00:00:00');
+  const end = new Date(endKey+'T00:00:00');
+  while(cur <= end){
+    const key = dkey(cur);
+    _mergeTrabajosIntoSchedule(key, porFecha[key]||[]);
+    cur.setDate(cur.getDate()+1);
+  }
+}
+
 async function syncTrabajosForMonth(year, month){
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const first = year+'-'+pad2(month+1)+'-01';
   const last  = year+'-'+pad2(month+1)+'-'+pad2(daysInMonth);
-  const {data:trabajos, error} = await sb.from('trabajos').select('*,asignaciones(user_id),clientes(*)').gte('fecha',first).lte('fecha',last);
-  if(error){ console.warn('[syncTrabajosForMonth] error:', error); return; }
-  if(!trabajos) return;
-  const porFecha = {};
-  trabajos.forEach(t=>{ (porFecha[t.fecha] = porFecha[t.fecha]||[]).push(t); });
-  for(let day=1; day<=daysInMonth; day++){
-    const key = year+'-'+pad2(month+1)+'-'+pad2(day);
-    _mergeTrabajosIntoSchedule(key, porFecha[key]||[]);
-  }
+  await syncTrabajosForRange(first, last);
 }
 
 // Lógica de mezcla compartida entre syncTrabajosForDate y
@@ -5353,6 +5383,7 @@ async function loadUsuarios(){
 }
 
 function openNewUserModal(){
+  if(currentUser?.rol!=='admin'){ toast('⚠ Solo el administrador puede gestionar usuarios'); return; }
   document.getElementById('nu-title').textContent='Nuevo usuario';
   document.getElementById('nu-nombre').value='';
   document.getElementById('nu-pin').value='';
@@ -5363,6 +5394,7 @@ function openNewUserModal(){
 }
 
 function editUser(id,nombre,rol){
+  if(currentUser?.rol!=='admin'){ toast('⚠ Solo el administrador puede gestionar usuarios'); return; }
   document.getElementById('nu-title').textContent='Editar usuario';
   document.getElementById('nu-nombre').value=nombre;
   document.getElementById('nu-pin').value='';
@@ -5373,6 +5405,7 @@ function editUser(id,nombre,rol){
 }
 
 async function saveUser(){
+  if(currentUser?.rol!=='admin'){ toast('⚠ Solo el administrador puede gestionar usuarios'); return; }
   const nombre=document.getElementById('nu-nombre').value.trim();
   const pin=document.getElementById('nu-pin').value.trim();
   const rol=document.getElementById('nu-rol').value;
@@ -5390,6 +5423,7 @@ async function saveUser(){
 }
 
 async function deleteUser(){
+  if(currentUser?.rol!=='admin'){ toast('⚠ Solo el administrador puede gestionar usuarios'); return; }
   const id=document.getElementById('nu-edit-id').value; if(!id)return;
   if(!confirm('¿Desactivar este usuario?'))return;
   await sb.from('users').update({activo:false}).eq('id',id);
