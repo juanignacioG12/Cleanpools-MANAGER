@@ -934,7 +934,11 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
     display:flex; align-items:center; justify-content:center;
   }
   #app{
-    max-width: 920px;
+    /* Ancho moderado: suficiente para verse como "ventana de escritorio"
+       sin estirar elementos pensados para mobile (como el calendario, que
+       tiene celdas cuadradas de 7 columnas y se ve enorme si el
+       contenedor es demasiado ancho). */
+    max-width: 560px;
     width: 92vw;
     height: 92vh; height: 92dvh;
     margin: 0 auto;
@@ -964,12 +968,11 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
   .bni svg{ width:18px; height:18px; }
   .bni:hover{ color:var(--c6); cursor:pointer; }
 
-  /* Lista de clientes en 2 columnas cuando hay espacio */
-  #client-list{
-    display:grid; grid-template-columns:1fr 1fr; gap:0;
-  }
-  #client-list .cr{ border-right:1px solid var(--border); }
-  #client-list .cr:nth-child(2n){ border-right:none; }
+  /* Blindaje extra: el calendario mantiene su proporción normal aunque
+     el contenedor sea más ancho — sin esto, las celdas cuadradas de 7
+     columnas se agrandan muchísimo y empujan la lista de tareas del día
+     fuera de la vista. */
+  .cal-grid{ max-width:420px; margin:0 auto; }
 
   /* Modales: ancho fijo cómodo en vez de ocupar toda la pantalla */
   .modal-box{ max-width:440px; margin:0 auto; }
@@ -990,7 +993,77 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 
 /* Pantallas muy anchas: un poco más de aire, sin exagerar */
 @media (min-width: 1300px){
-  #app{ max-width: 1040px; }
+  #app{ max-width: 640px; }
+}
+
+/* ════════════════════════════════════════════
+   MODERNIZACIÓN DE INTERFAZ — solo estética,
+   no toca estructura HTML ni lógica de datos.
+   ════════════════════════════════════════════ */
+
+/* Transición suave al cambiar de pantalla (fade + leve deslizamiento) */
+.page.on{
+  animation: cpPageIn .22s cubic-bezier(.25,.8,.5,1);
+}
+@keyframes cpPageIn{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+@media (prefers-reduced-motion: reduce){
+  .page.on{ animation:none; }
+}
+
+/* Feedback táctil al tocar — sensación de "app nativa" */
+.cr, .jcard, .bconfirm, .bni, .pill, .fab-opt, .nota-card,
+.admin-user-card, .cal-day, .section-tab-btn, .emp-btn, #fab-btn,
+.cr-ico{
+  transition: transform .12s ease, box-shadow .12s ease, background-color .15s ease;
+}
+.cr:active, .jcard:active, .bconfirm:active, .pill:active,
+.fab-opt:active, .nota-card:active, .admin-user-card:active,
+.cal-day:active, .emp-btn:active, .cr-ico:active{
+  transform: scale(.97);
+}
+#fab-btn:active{ transform: scale(.92); }
+.bni:active{ transform: scale(.90); }
+
+/* Profundidad sutil en tarjetas — sensación más "elevada" y moderna */
+.jcard{
+  box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+}
+.jcard:hover{ box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+.admin-user-card, .nota-card{
+  box-shadow: 0 1px 3px rgba(0,0,0,.10);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.admin-user-card:hover, .nota-card:hover{ box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+
+/* Toast: entra deslizando con rebote suave, no solo aparece */
+#toast{
+  transform:translate(-50%,-14px) scale(.95);
+  transition:opacity .28s cubic-bezier(.34,1.56,.64,1), transform .28s cubic-bezier(.34,1.56,.64,1);
+}
+#toast.show{ transform:translate(-50%,0) scale(1); }
+
+/* Pills de estado (Todos/Activos/Pendientes) con transición de color más viva */
+.pill{ transition: background-color .18s ease, color .18s ease, transform .12s ease; }
+
+/* Checkbox / estado de tarea completada: pequeño "pop" al marcar */
+@keyframes cpPop{
+  0%{ transform:scale(1); }
+  40%{ transform:scale(1.15); }
+  100%{ transform:scale(1); }
+}
+.st-done{ animation: cpPop .3s ease; }
+
+/* Números del dashboard con transición suave al actualizarse (ver JS: animateCount) */
+.mv{ transition: color .3s ease; }
+
+/* Scrollbar fina y discreta en vistas de escritorio (cosmético) */
+@media (min-width:820px){
+  .page::-webkit-scrollbar{ width:8px; }
+  .page::-webkit-scrollbar-thumb{ background:var(--border2); border-radius:4px; }
+  .page::-webkit-scrollbar-track{ background:transparent; }
 }
 </style>
 </head>
