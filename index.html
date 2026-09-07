@@ -1065,6 +1065,62 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
   .page::-webkit-scrollbar-thumb{ background:var(--border2); border-radius:4px; }
   .page::-webkit-scrollbar-track{ background:transparent; }
 }
+
+/* ════════════════════════════════════════════
+   MÁS "VIDA": entrada escalonada de listas,
+   brillo/pulso en elementos clave — solo CSS.
+   ════════════════════════════════════════════ */
+
+/* Las tarjetas de una lista aparecen en cascada, una tras otra, en vez
+   de todas de golpe. `backwards` hace que empiecen invisibles antes de
+   que llegue su turno (si no, se verían todas un instante antes de animar). */
+.jcard, .cr, .nota-card, .admin-user-card{
+  animation: cpItemIn .32s cubic-bezier(.25,.8,.5,1) backwards;
+}
+.jcard:nth-of-type(1),.cr:nth-of-type(1),.nota-card:nth-of-type(1),.admin-user-card:nth-of-type(1){animation-delay:.00s}
+.jcard:nth-of-type(2),.cr:nth-of-type(2),.nota-card:nth-of-type(2),.admin-user-card:nth-of-type(2){animation-delay:.035s}
+.jcard:nth-of-type(3),.cr:nth-of-type(3),.nota-card:nth-of-type(3),.admin-user-card:nth-of-type(3){animation-delay:.07s}
+.jcard:nth-of-type(4),.cr:nth-of-type(4),.nota-card:nth-of-type(4),.admin-user-card:nth-of-type(4){animation-delay:.105s}
+.jcard:nth-of-type(5),.cr:nth-of-type(5),.nota-card:nth-of-type(5),.admin-user-card:nth-of-type(5){animation-delay:.14s}
+.jcard:nth-of-type(6),.cr:nth-of-type(6),.nota-card:nth-of-type(6),.admin-user-card:nth-of-type(6){animation-delay:.175s}
+.jcard:nth-of-type(n+7),.cr:nth-of-type(n+7),.nota-card:nth-of-type(n+7),.admin-user-card:nth-of-type(n+7){animation-delay:.2s}
+@keyframes cpItemIn{
+  from{ opacity:0; transform:translateY(12px) scale(.98); }
+  to{ opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* Botón "+" con un brillo suave y constante — invita a tocarlo. Se pausa
+   mientras el menú está abierto para no chocar con su propio estilo. */
+#fab-btn:not(.open){ animation: cpFabGlow 2.6s ease-in-out infinite; }
+@keyframes cpFabGlow{
+  0%,100%{ box-shadow:0 4px 24px rgba(123,189,232,.35), 0 0 0 0 rgba(123,189,232,.35); }
+  50%{ box-shadow:0 4px 28px rgba(123,189,232,.55), 0 0 0 8px rgba(123,189,232,0); }
+}
+
+/* Aviso de "cambios pendientes de sincronizar" pulsa suave para llamar
+   la atención sin ser molesto */
+#sync-pending-badge{ animation: cpBadgePulse 1.8s ease-in-out infinite; }
+@keyframes cpBadgePulse{
+  0%,100%{ box-shadow:0 0 0 0 rgba(245,166,35,.55); }
+  50%{ box-shadow:0 0 0 6px rgba(245,166,35,0); }
+}
+
+/* Ícono de tema (sol/luna) gira suave al tocarlo */
+#theme-toggle svg{ transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+#theme-toggle:active svg{ transform: rotate(180deg); }
+
+/* Indicador de carga simple pero con más vida que texto plano */
+@keyframes cpSpin{ to{ transform:rotate(360deg); } }
+.cp-spinner{
+  display:inline-block; width:14px; height:14px;
+  border:2px solid var(--border2); border-top-color:var(--c6);
+  border-radius:50%; animation: cpSpin .7s linear infinite;
+  vertical-align:middle; margin-right:6px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .jcard, .cr, .nota-card, .admin-user-card, #fab-btn, #sync-pending-badge{ animation:none !important; }
+}
 </style>
 </head>
 <body>
@@ -2825,6 +2881,7 @@ async function asRemoveFromDay(){
   const e=schedule[asCtx.dateKey][asCtx.idx];
   const c=clients[e.clientId];
   const supabaseId = e.supabase_id;
+  if(supabaseId) _borrandoAhora.add(supabaseId);
   schedule[asCtx.dateKey].splice(asCtx.idx,1);
   dbSave();
   closeModal('actions');
@@ -2845,10 +2902,12 @@ async function asRemoveFromDay(){
     }catch(err){
       console.warn('[SB] error al eliminar trabajo:',err);
       toast('⚠ Se quitó acá, pero no se pudo borrar en la nube: '+(err?.message||err));
+    } finally {
+      _borrandoAhora.delete(supabaseId);
     }
   }
 }
-function asRemoveRecurrenceFuture(){
+async function asRemoveRecurrenceFuture(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
   const c=clients[e.clientId];
@@ -2856,11 +2915,18 @@ function asRemoveRecurrenceFuture(){
   const fromKey=asCtx.dateKey;
   if(!recId)return;
   let removed=0;
+  const supabaseIdsABorrar=[];
   Object.keys(schedule).forEach(k=>{
     if(k>=fromKey){
-      const before=schedule[k].length;
+      const antes=schedule[k].length;
+      schedule[k].forEach(x=>{
+        if(x.recurrenceId===recId && x.supabase_id){
+          supabaseIdsABorrar.push(x.supabase_id);
+          _borrandoAhora.add(x.supabase_id);
+        }
+      });
       schedule[k]=schedule[k].filter(x=>x.recurrenceId!==recId);
-      removed+=before-schedule[k].length;
+      removed+=antes-schedule[k].length;
     }
   });
   dbSave();
@@ -2870,6 +2936,21 @@ function asRemoveRecurrenceFuture(){
   renderRoute();
   toast('✓ Quitadas '+removed+' fechas futuras de '+c.n);
   asCtx=null;
+  // ⚠ IMPORTANTE: antes esto nunca avisaba a Supabase — las tareas
+  // "quitadas" seguían existiendo en la base y volvían a aparecer en la
+  // próxima sincronización.
+  if(supabaseIdsABorrar.length){
+    try{
+      await sb.from('asignaciones').delete().in('trabajo_id',supabaseIdsABorrar);
+      const {error}=await sb.from('trabajos').delete().in('id',supabaseIdsABorrar);
+      if(error) throw error;
+    }catch(err){
+      console.warn('[SB] error al eliminar recurrencia futura:',err);
+      toast('⚠ Se quitó acá, pero no se pudo borrar en la nube: '+(err?.message||err));
+    } finally {
+      supabaseIdsABorrar.forEach(id=>_borrandoAhora.delete(id));
+    }
+  }
 }
 // ── CONFIRM MODAL (generic) ──
 let confirmCtx=null;
@@ -4924,6 +5005,13 @@ async function syncTrabajosForMonth(year, month){
 // Lógica de mezcla compartida entre syncTrabajosForDate y
 // syncTrabajosForMonth: reconstruye schedule[dateKey] a partir de una
 // lista de trabajos ya obtenida de Supabase para ese día específico.
+// Tareas que se están borrando AHORA MISMO (el pedido de borrado ya
+// salió hacia Supabase pero todavía no se confirmó). Mientras un
+// supabase_id esté acá, ninguna sincronización en curso lo puede volver
+// a agregar — sin esto, una sincronización que llegaba a mitad de camino
+// del borrado "resucitaba" la tarea, y había que borrarla dos veces.
+const _borrandoAhora = new Set();
+
 function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   if(!schedule[dateKey]) schedule[dateKey]=[];
   const yaSincronizadas = schedule[dateKey].filter(j=>j.supabase_id).length;
@@ -4933,6 +5021,7 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
   const nuevas=[];
   trabajosDelDia.forEach(t=>{
+    if(_borrandoAhora.has(t.id)) return; // se está borrando — no revivir
     const cl=t.clientes;
     if(!cl||cl.deleted) return;
     let lc = clients.find(c=>c.supabase_id===cl.id);
