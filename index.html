@@ -1067,27 +1067,9 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 }
 
 /* ════════════════════════════════════════════
-   MÁS "VIDA": entrada escalonada de listas,
-   brillo/pulso en elementos clave — solo CSS.
+   MÁS "VIDA": brillo/pulso en elementos clave
+   — solo CSS.
    ════════════════════════════════════════════ */
-
-/* Las tarjetas de una lista aparecen en cascada, una tras otra, en vez
-   de todas de golpe. `backwards` hace que empiecen invisibles antes de
-   que llegue su turno (si no, se verían todas un instante antes de animar). */
-.jcard, .cr, .nota-card, .admin-user-card{
-  animation: cpItemIn .32s cubic-bezier(.25,.8,.5,1) backwards;
-}
-.jcard:nth-of-type(1),.cr:nth-of-type(1),.nota-card:nth-of-type(1),.admin-user-card:nth-of-type(1){animation-delay:.00s}
-.jcard:nth-of-type(2),.cr:nth-of-type(2),.nota-card:nth-of-type(2),.admin-user-card:nth-of-type(2){animation-delay:.035s}
-.jcard:nth-of-type(3),.cr:nth-of-type(3),.nota-card:nth-of-type(3),.admin-user-card:nth-of-type(3){animation-delay:.07s}
-.jcard:nth-of-type(4),.cr:nth-of-type(4),.nota-card:nth-of-type(4),.admin-user-card:nth-of-type(4){animation-delay:.105s}
-.jcard:nth-of-type(5),.cr:nth-of-type(5),.nota-card:nth-of-type(5),.admin-user-card:nth-of-type(5){animation-delay:.14s}
-.jcard:nth-of-type(6),.cr:nth-of-type(6),.nota-card:nth-of-type(6),.admin-user-card:nth-of-type(6){animation-delay:.175s}
-.jcard:nth-of-type(n+7),.cr:nth-of-type(n+7),.nota-card:nth-of-type(n+7),.admin-user-card:nth-of-type(n+7){animation-delay:.2s}
-@keyframes cpItemIn{
-  from{ opacity:0; transform:translateY(12px) scale(.98); }
-  to{ opacity:1; transform:translateY(0) scale(1); }
-}
 
 /* Botón "+" con un brillo suave y constante — invita a tocarlo. Se pausa
    mientras el menú está abierto para no chocar con su propio estilo. */
@@ -1119,7 +1101,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 }
 
 @media (prefers-reduced-motion: reduce){
-  .jcard, .cr, .nota-card, .admin-user-card, #fab-btn, #sync-pending-badge{ animation:none !important; }
+  #fab-btn, #sync-pending-badge{ animation:none !important; }
 }
 </style>
 </head>
@@ -2835,6 +2817,14 @@ function saveResched(){
   e.time=newTime;
   if(!schedule[newDate]) schedule[newDate]=[];
   schedule[newDate].push(e);
+  // ⚠ Igual que al borrar: mientras el cambio de fecha viaja hacia
+  // Supabase, ninguna sincronización en curso puede resucitar esta tarea
+  // en la fecha VIEJA (donde Supabase todavía la reporta, hasta que se
+  // confirme el update) — sin esto, quedaba duplicada (una en la fecha
+  // vieja "resucitada" + la movida acá), y borrar cualquiera de las dos
+  // limpiaba ambas en la siguiente sincronización, porque comparten el
+  // mismo identificador.
+  if(e.supabase_id) _borrandoAhora.add(e.supabase_id);
   dbSave();
   closeModal('resched');
   selectedDate=newDate;
@@ -2845,14 +2835,18 @@ function saveResched(){
   renderCalendar();
   renderToday();
   toast('✓ Reprogramado');
-  // ⚠ IMPORTANTE: sin avisarle a Supabase el cambio de fecha, la tarea
-  // seguía existiendo ahí con la fecha VIEJA — la próxima sincronización
-  // la volvía a traer en el día anterior, generando un duplicado (la
-  // movida acá + la que "resucitaba" en la fecha vieja).
   if(e.supabase_id){
     sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',e.supabase_id)
       .then(({error})=>{ if(error) queueSync('reschedule',{supabaseId:e.supabase_id,newDate,newTime}); })
-      .catch(()=>queueSync('reschedule',{supabaseId:e.supabase_id,newDate,newTime}));
+      .catch(()=>queueSync('reschedule',{supabaseId:e.supabase_id,newDate,newTime}))
+      .finally(()=>{
+        _borrandoAhora.delete(e.supabase_id);
+        // Una vez confirmado el cambio, traer la versión fresca de ambas
+        // fechas para que todo quede prolijo (por si algo se desincronizó
+        // mientras estaba protegido).
+        syncTrabajosForDate(oldDate).then(()=>{ if(selectedDate===oldDate) renderAgendaListPaint(oldDate); renderCalendar(); }).catch(()=>{});
+        syncTrabajosForDate(newDate).then(()=>{ if(selectedDate===newDate) renderAgendaListPaint(newDate); renderCalendar(); }).catch(()=>{});
+      });
   }
   asCtx=null;
 }
