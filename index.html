@@ -2188,6 +2188,11 @@ function filterClients(){
   if(sfil==='sinGPS') list=list.filter(c=>!validCoord(c.lat,c.lng));
   else if(sfil) list=list.filter(c=>c.status===sfil);
   if(q)list=list.filter(c=>c.n.toLowerCase().includes(q)||c.zone.toLowerCase().includes(q));
+  // Orden alfabético: antes la lista seguía el orden interno de Supabase
+  // (no alfabético), así que navegando la lista completa un cliente
+  // podía "esconderse" en cualquier posición aunque buscarlo por nombre
+  // sí funcionara bien (la búsqueda no depende del orden).
+  list = [...list].sort((a,b)=>a.n.localeCompare(b.n,'es',{sensitivity:'base'}));
   renderClients(list);
 }
 function filterByStatus(s){sfil=s;filterClients();}
