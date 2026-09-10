@@ -451,7 +451,9 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .cal-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);position:relative;border:1px solid transparent;transition:all .15s}
 .cal-day:active{background:var(--pdim)}
 .cal-day.empty{cursor:default}
+.cal-day.sun{background:rgba(242,92,92,0.13);color:var(--red)}
 .cal-day.today{border-color:var(--c6);color:var(--c6)}
+.cal-day.today.sun{border-color:var(--red)}
 .cal-day.sel{background:linear-gradient(135deg,var(--c4),var(--c6));color:var(--c1)}
 .cal-day .dot{width:5px;height:5px;border-radius:50%;background:var(--c6);position:absolute;bottom:5px}
 .cal-day.sel .dot{background:var(--c1)}
@@ -2690,7 +2692,15 @@ function renderCalendar(){
   }).catch(()=>{});
 }
 function renderCalendarPaint(){
-  document.getElementById('cal-title').textContent=MONTH_NAMES[calMonth]+' '+calYear;
+  const titleTxt = MONTH_NAMES[calMonth]+' '+calYear;
+  // El calendario del dashboard (dash-cal-title) y el de la página Agenda
+  // (cal-title) son dos elementos distintos — antes solo se actualizaba
+  // este último, por eso el mes no se veía arriba en el dashboard hasta
+  // tocar un día (que sí refrescaba la fecha por otro lado).
+  const titleEl=document.getElementById('cal-title');
+  const dashTitleEl=document.getElementById('dash-cal-title');
+  if(titleEl) titleEl.textContent=titleTxt;
+  if(dashTitleEl) dashTitleEl.textContent=titleTxt;
   const first=new Date(calYear,calMonth,1);
   const startDow=first.getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
@@ -2700,8 +2710,9 @@ function renderCalendarPaint(){
     const key=calYear+'-'+pad2(calMonth+1)+'-'+pad2(day);
     const isToday=key===TODAY_KEY;
     const isSel=key===selectedDate;
+    const isSun=new Date(calYear,calMonth,day).getDay()===0;
     const cnt=jobsFor(key).length;
-    html+=`<div class="cal-day ${isToday?'today':''} ${isSel?'sel':''}" onclick="selectDay('${key}')">
+    html+=`<div class="cal-day ${isSun?'sun':''} ${isToday?'today':''} ${isSel?'sel':''}" onclick="selectDay('${key}')">
       ${day}
       ${cnt>0?`<span class="cnt">${cnt}</span>`:''}
       ${cnt>0?'<span class="dot"></span>':''}
