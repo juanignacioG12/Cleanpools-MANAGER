@@ -166,17 +166,17 @@ self.addEventListener('message', e => {
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --c1:#001D39;--c2:#0A4174;--c3:#49769F;--c4:#4E8EA2;--c5:#6EA2B3;--c6:#7BBDE8;--c7:#BDD8E9;
-  --bg:#001D39;--bg2:#021628;--card:#0d2d4a;--card2:#0f3554;
+  --bg:#001D39;--bg2:#021628;--bg3:#0f3554;--card:#0d2d4a;--card2:#0f3554;
   --border:rgba(123,189,232,0.18);--border2:rgba(123,189,232,0.35);
   --pdim:rgba(123,189,232,0.10);
   --text:#EEF6FC;--text2:#BDD8E9;--text3:#4E7A96;
-  --red:#F25C5C;--amber:#F5A623;--green:#4ED8A0;
+  --red:#F25C5C;--amber:#F5A623;--green:#4ED8A0;--teal:#2DD4BF;
   --r:14px;--r2:9px;
   --shadow:none;
 }
 /* ── LIGHT THEME ── */
 html[data-theme="light"]{
-  --bg:#EAF3FB;--bg2:#DDEBF8;--card:#FFFFFF;--card2:#F3F9FD;
+  --bg:#EAF3FB;--bg2:#DDEBF8;--bg3:#F3F9FD;--card:#FFFFFF;--card2:#F3F9FD;
   --border:rgba(10,65,116,0.12);--border2:rgba(10,65,116,0.28);
   --pdim:rgba(73,118,159,0.08);
   --text:#0A2B45;--text2:#2E5A7E;--text3:#7E9DB4;
@@ -3280,11 +3280,16 @@ function saveFin(){
   const tipo=document.getElementById('nf-tipo').value;
   const cat=document.getElementById('nf-cat').value;
   const desc=document.getElementById('nf-desc').value.trim()||cat;
-  transactions.push({id:nextTransId++,tipo,cat,monto,desc,fecha:TODAY_KEY,ts:Date.now()});
+  const t={id:nextTransId++,tipo,cat,monto,desc,fecha:TODAY_KEY,ts:Date.now()};
+  transactions.push(t);
   dbSave();
   renderFinanzas();
   closeModal('fin');
   toast((tipo==='ingreso'?'+':'−')+'$'+monto.toLocaleString('es-AR')+' registrado ✓');
+  // Subir a Supabase — así el gasto/ingreso queda guardado en la nube y
+  // sobrevive a un reinstall o "borrar y volver a abrir" la app, en vez
+  // de vivir solo en este teléfono (localStorage/IndexedDB se pierden ahí).
+  saveTransaccionToSupabase(t).catch(e=>{ console.warn('[SB] sync transaccion:',e); queueSync('save_transaccion',{transId:t.id}); });
 }
 
 // ── PAGE SWITCH ──
@@ -3502,12 +3507,17 @@ function confirmResetStats(){
   openModal('reset-stats');
 }
 function executeResetStats(){
+  const idsToDelete = transactions.map(t=>t.supabase_id).filter(Boolean);
   transactions.length = 0;
   nextTransId = 1;
   dbSave();
   closeModal('reset-stats');
   renderFinanzas();
   toast('✅ Estadísticas reiniciadas. Clientes y agenda sin cambios.');
+  if(idsToDelete.length){
+    sb.from('transacciones').delete().in('id',idsToDelete)
+      .then(({error})=>{ if(error) console.warn('[SB] reset stats cloud:',error); });
+  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -4134,6 +4144,10 @@ async function runSyncQueueItem(item){
     const {supabaseId,newDate,newTime} = item.payload;
     const {error} = await sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',supabaseId);
     if(error) throw error;
+  } else if(item.type==='save_transaccion'){
+    const t = transactions.find(x=>x.id===item.payload.transId);
+    if(!t) return; // ya no existe (ej: se reiniciaron las estadísticas)
+    await saveTransaccionToSupabase(t);
   }
 }
 
@@ -4305,7 +4319,10 @@ function importBackup(file){
       const ok = confirm('Esto va a REEMPLAZAR las notas y transacciones actuales de este teléfono por las del backup (del '+(data._fecha?new Date(data._fecha).toLocaleString('es-AR'):'?')+').\n\n¿Continuar?');
       if(!ok) return;
       if(Array.isArray(data.notas)){ notas.length=0; notas.push(...data.notas); }
-      if(Array.isArray(data.transactions) && typeof transactions!=='undefined'){ transactions.length=0; transactions.push(...data.transactions); }
+      if(Array.isArray(data.transactions) && typeof transactions!=='undefined'){
+        transactions.length=0; transactions.push(...data.transactions);
+        transactions.forEach(t=>{ if(!t.supabase_id) saveTransaccionToSupabase(t).catch(e=>queueSync('save_transaccion',{transId:t.id})); });
+      }
       dbSaveNow();
       toast('✓ Backup restaurado');
       if(typeof renderNotas==='function') renderNotas();
@@ -4941,6 +4958,7 @@ async function syncFromSupabase(){
       if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
     }
     await syncTrabajosDelDia();
+    await syncTransaccionesFromSupabase();
     renderToday(); renderDashboard(); renderRoute();
     // ⚠ IMPORTANTE: sin esto, un empleado que abre la app DESPUÉS de que
     // ya le asignaron una tarea (no en el momento) nunca veía el
@@ -5206,6 +5224,40 @@ async function saveTrabajoToSupabase(job,dateKey){
     if(data) job.supabase_id=data.id;
     else throw new Error('Supabase no devolvió el ID del trabajo');
   }
+}
+
+async function saveTransaccionToSupabase(t){
+  const p={tipo:t.tipo,categoria:t.cat,monto:t.monto,descripcion:t.desc,fecha:t.fecha,deleted:false,updated_at:new Date().toISOString()};
+  if(t.supabase_id){
+    const {error}=await sb.from('transacciones').update(p).eq('id',t.supabase_id);
+    if(error) throw error;
+  } else {
+    const {data,error}=await sb.from('transacciones').insert(p).select().single();
+    if(error) throw error;
+    if(!data) throw new Error('Supabase no devolvió el ID de la transacción');
+    t.supabase_id=data.id;
+    dbSave(); // persistir el supabase_id asignado, para no duplicar en el próximo sync
+  }
+}
+
+// Trae las transacciones guardadas en la nube y las mezcla con las locales.
+// Así, si el teléfono se reinstaló o se le borraron los datos, los gastos
+// e ingresos vuelven a aparecer apenas se loguea (en vez de perderse).
+async function syncTransaccionesFromSupabase(){
+  const {data:trans, error} = await sb.from('transacciones').select('*').eq('deleted',false).order('id');
+  if(error){ console.warn('[syncTransacciones] error:', error); return; }
+  if(!trans) return;
+  trans.forEach(st=>{
+    const ex = transactions.find(t=>t.supabase_id===st.id);
+    if(ex){
+      ex.tipo=st.tipo; ex.cat=st.categoria; ex.monto=st.monto; ex.desc=st.descripcion; ex.fecha=st.fecha;
+    } else {
+      transactions.push({id:nextTransId++,tipo:st.tipo,cat:st.categoria,monto:st.monto,desc:st.descripcion,
+        fecha:st.fecha,ts:new Date(st.created_at).getTime(),supabase_id:st.id});
+    }
+  });
+  dbSave();
+  if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas();
 }
 
 function renderEmpleadoView(){
