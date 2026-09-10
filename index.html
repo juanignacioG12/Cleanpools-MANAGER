@@ -2892,6 +2892,10 @@ async function asRemoveFromDay(){
   const c=clients[e.clientId];
   const supabaseId = e.supabase_id;
   if(supabaseId) _borrandoAhora.add(supabaseId);
+  // Si todavía no tiene supabase_id, es porque se está subiendo a la nube
+  // en este mismo momento (ver saveWork()) — marcamos su _lid para que,
+  // apenas termine de subir, se borre sola en vez de quedar fantasma.
+  else if(e._lid) _pendingDeleteLid.add(e._lid);
   schedule[asCtx.dateKey].splice(asCtx.idx,1);
   dbSave();
   closeModal('actions');
@@ -2930,9 +2934,15 @@ async function asRemoveRecurrenceFuture(){
     if(k>=fromKey){
       const antes=schedule[k].length;
       schedule[k].forEach(x=>{
-        if(x.recurrenceId===recId && x.supabase_id){
-          supabaseIdsABorrar.push(x.supabase_id);
-          _borrandoAhora.add(x.supabase_id);
+        if(x.recurrenceId===recId){
+          if(x.supabase_id){
+            supabaseIdsABorrar.push(x.supabase_id);
+            _borrandoAhora.add(x.supabase_id);
+          } else if(x._lid){
+            // Misma protección que en asRemoveFromDay(): todavía se está
+            // subiendo a Supabase, se borrará sola apenas termine.
+            _pendingDeleteLid.add(x._lid);
+          }
         }
       });
       schedule[k]=schedule[k].filter(x=>x.recurrenceId!==recId);
@@ -3249,8 +3259,13 @@ function saveWork(){
   dates.sort();
   dates.forEach(d=>{
     if(!schedule[d])schedule[d]=[];
+    // _lid: identificador local temporal — permite detectar si el usuario
+    // borra esta tarea MIENTRAS todavía se está subiendo a Supabase (ver
+    // _pendingDeleteLid más abajo). Sin esto, borrar una tarea recién
+    // creada muy rápido no alcanzaba a cancelar la subida en curso, y la
+    // tarea "fantasma" quedaba viva en la nube y volvía a aparecer sola.
     schedule[d].push({clientId,time:start,endTime:end,notes,status:'pend',recurrenceId,
-      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid}))});
+      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid})), _lid:_nextJobLid++});
   });
 
   // refresh everything that depends on schedule
@@ -3268,6 +3283,18 @@ function saveWork(){
     (schedule[d]||[]).filter(j=>!j.supabase_id).forEach(async job=>{
       try{
         await saveTrabajoToSupabase(job,d);
+        // El usuario pudo haber borrado esta misma tarea MIENTRAS se
+        // subía (todavía sin supabase_id, así que el borrado no pudo
+        // avisarle a Supabase). Si eso pasó, en vez de dejarla viva en
+        // la nube, la borramos ahora mismo — recién nacida.
+        if(job._lid && _pendingDeleteLid.has(job._lid)){
+          _pendingDeleteLid.delete(job._lid);
+          try{
+            await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id);
+            await sb.from('trabajos').delete().eq('id',job.supabase_id);
+          }catch(e2){ console.warn('[SB] no se pudo limpiar tarea fantasma:',e2); }
+          return;
+        }
         if(assignUserIds.length && job.supabase_id){
           await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id);
           await Promise.all(assignUserIds.map(uid=>
@@ -5039,6 +5066,11 @@ async function syncTrabajosForMonth(year, month){
 // a agregar — sin esto, una sincronización que llegaba a mitad de camino
 // del borrado "resucitaba" la tarea, y había que borrarla dos veces.
 const _borrandoAhora = new Set();
+// Contador de _lid (identificador local temporal de una tarea recién creada,
+// ver saveWork()) + set de _lid marcados para borrar en cuanto terminen de
+// subirse a Supabase.
+let _nextJobLid = 1;
+const _pendingDeleteLid = new Set();
 
 function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   if(!schedule[dateKey]) schedule[dateKey]=[];
