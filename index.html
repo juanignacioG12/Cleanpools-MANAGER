@@ -3327,7 +3327,7 @@ function saveFin(){
   // Subir a Supabase — así el gasto/ingreso queda guardado en la nube y
   // sobrevive a un reinstall o "borrar y volver a abrir" la app, en vez
   // de vivir solo en este teléfono (localStorage/IndexedDB se pierden ahí).
-  saveTransaccionToSupabase(t).catch(e=>{ console.warn('[SB] sync transaccion:',e); queueSync('save_transaccion',{transId:t.id}); });
+  saveTransaccionToSupabase(t).catch(e=>{ console.warn('[SB] sync transaccion:',e); queueSync('save_transaccion',{transId:t.id}); toast('⚠ Guardado en el teléfono. Se subirá a la nube apenas se pueda.'); });
 }
 
 // ── PAGE SWITCH ──
@@ -4133,8 +4133,13 @@ function queueSync(type, payload){
 let _flushingSyncQueue = false;
 async function flushSyncQueue(){
   if(_flushingSyncQueue) return; // evitar corridas superpuestas
-  if(!navigator.onLine) return;
   if(!syncQueue.length) return;
+  // Nota: antes acá se cortaba si navigator.onLine daba false. Se sacó
+  // porque ese valor es poco confiable en muchos celulares/PWAs (a veces
+  // queda marcado "sin internet" aunque sí lo haya), y eso dejaba
+  // cambios pendientes trabados para siempre aunque hubiera conexión.
+  // Ahora se intenta subir directo, y es el resultado real de Supabase
+  // (éxito o error) el que decide si el ítem sigue en la cola.
   _flushingSyncQueue = true;
   const pending = [...syncQueue];
   let okCount = 0;
@@ -4147,8 +4152,6 @@ async function flushSyncQueue(){
       item.attempts = (item.attempts||0)+1;
       const idx = syncQueue.findIndex(q=>q.id===item.id);
       if(idx>-1) syncQueue[idx].attempts = item.attempts;
-      // Si sigue sin conexión, no tiene sentido seguir intentando los demás ahora
-      if(!navigator.onLine) break;
     }
   }
   saveSyncQueue();
