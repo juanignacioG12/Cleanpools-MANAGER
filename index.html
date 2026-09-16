@@ -63,7 +63,7 @@
 if('serviceWorker' in navigator){
   // ⚠ Subir este número en cada deploy con cambios importantes.
   // Fuerza a que TODOS los clientes descarten la caché vieja.
-  const SW_VERSION = 'cp-v5';
+  const SW_VERSION = 'cp-v6';
   const SW_CODE = `
 const CACHE = '${SW_VERSION}';
 const SHELL = ['./'];
@@ -325,6 +325,7 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .rconn{position:absolute;left:26px;top:36px;bottom:-10px;width:1.5px;background:linear-gradient(180deg,var(--c4),transparent)}
 .rstop:last-child .rconn{display:none}
 .rnum{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--c3),var(--c4));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--text);flex-shrink:0;margin-top:2px}
+.rnum.rdone{background:linear-gradient(135deg,var(--green),#2fae7d)}
 .ri{flex:1;min-width:0}
 .rn{font-size:13px;font-weight:700;color:var(--text)}
 .ra{font-size:10px;color:var(--text3);margin-top:1px}
@@ -2084,6 +2085,7 @@ function toggleWork(dateKey,idx){
   e.status = e.status==='done' ? 'pend' : (e.status==='pend' ? 'now' : 'done');
   renderToday();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
+  if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute();
   if(e.supabase_id){
     sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id)
       .then(({error})=>{ if(error) queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status}); })
@@ -2429,9 +2431,9 @@ function renderRoute(){
     }
     const distFromBase=validCoord(cl.lat,cl.lng)?haversineKm(basePt,[cl.lat,cl.lng]).toFixed(1)+' km base':'–';
     return `
-    <div class="rstop">
+    <div class="rstop" style="cursor:pointer" onclick="toggleWork('${routeDate}',${j.idx})" title="Tocar para cambiar el estado (pendiente → en curso → completado)">
       <div class="rconn"></div>
-      <div class="rnum">${i+1}</div>
+      <div class="rnum ${j.status==='done'?'rdone':''}">${j.status==='done'?'✓':i+1}</div>
       <div class="ri">
         <div class="rn">${cl.n} ${!validCoord(cl.lat,cl.lng)?'<span style="color:var(--amber);font-size:9px">⚠ Sin GPS</span>':''}</div>
         <div class="ra">${cl.address||cl.zone}${j.time?' · '+j.time:''}</div>
@@ -2440,7 +2442,7 @@ function renderRoute(){
           <span class="rkm">↔ ${distTxt}</span>
           ${statusBadge(j.status)}
         </div>
-        <a class="nav-btn" href="javascript:void(0)" onclick="goNavigate(${cl.lat},${cl.lng})">
+        <a class="nav-btn" href="javascript:void(0)" onclick="event.stopPropagation();goNavigate(${cl.lat},${cl.lng})">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
           Ir · ${distFromBase}
         </a>
@@ -4143,6 +4145,7 @@ async function flushSyncQueue(){
   _flushingSyncQueue = true;
   const pending = [...syncQueue];
   let okCount = 0;
+  let firstErrorMsg = null;
   for(const item of pending){
     try{
       await runSyncQueueItem(item);
@@ -4152,10 +4155,13 @@ async function flushSyncQueue(){
       item.attempts = (item.attempts||0)+1;
       const idx = syncQueue.findIndex(q=>q.id===item.id);
       if(idx>-1) syncQueue[idx].attempts = item.attempts;
+      if(!firstErrorMsg) firstErrorMsg = (e && (e.message||e.error_description||e.hint)) || JSON.stringify(e);
+      console.warn('[SyncQueue] falló', item.type, e);
     }
   }
   saveSyncQueue();
   if(okCount>0) toast('✓ '+okCount+' cambio(s) pendiente(s) sincronizado(s)');
+  else if(firstErrorMsg) toast('⚠ Sync: '+firstErrorMsg);
   _flushingSyncQueue = false;
 }
 
