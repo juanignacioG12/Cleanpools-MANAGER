@@ -2082,7 +2082,12 @@ function renderToday(){
 }
 function toggleWork(dateKey,idx){
   const e=schedule[dateKey][idx];
-  e.status = e.status==='done' ? 'pend' : (e.status==='pend' ? 'now' : 'done');
+  // Antes esto ciclaba pendiente → en curso → completado (3 toques para
+  // completar en 2 pasos). "En curso" no se podía asignar desde ningún
+  // otro lado y generaba confusión ("toco y no se completa"). Ahora es
+  // directo: un toque completa, otro toque deshace — igual que en la
+  // vista de empleados (empToggleDone).
+  e.status = e.status==='done' ? 'pend' : 'done';
   renderToday();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
   if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute();
