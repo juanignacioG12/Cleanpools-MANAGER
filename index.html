@@ -1310,8 +1310,13 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         <span class="pill p-blue" onclick="filterByStatus(null)">Todos</span>
         <span class="pill p-green" onclick="filterByStatus('activo')">Activos</span>
         <span class="pill p-amber" onclick="filterByStatus('pendiente')">Pendientes</span>
+        <span class="pill" id="pill-nuevos" onclick="toggleNewSinceFilter()" style="background:rgba(78,216,160,.1);color:var(--green);border:1px solid rgba(78,216,160,.25);cursor:pointer">🆕 Nuevos</span>
         <span class="pill p-teal" onclick="showPage('mapa',null)">Ver mapa</span>
         <span class="pill" onclick="runDeduplication()" style="background:rgba(242,92,92,.1);color:var(--red);border:1px solid rgba(242,92,92,.2);cursor:pointer">🔍 Deduplicar</span>
+      </div>
+      <div id="new-since-bar" style="display:none;align-items:center;gap:8px;padding:0 16px 10px">
+        <span style="font-size:11px;color:var(--text3)">Nuevos desde:</span>
+        <input type="date" id="new-since-date" class="minput" style="padding:6px 10px;font-size:12px;width:auto" onchange="applyNewSinceDate()">
       </div>
       <div class="card" style="padding:0;overflow:hidden"><div id="client-list"></div></div>
     </div>
@@ -2197,11 +2202,43 @@ function renderClients(list){
       </div>
     </div>`).join('');
 }
+let newSinceDate = null; // 'YYYY-MM-DD' o null — filtro "clientes nuevos desde esta fecha"
+function defaultNewSinceCutoff(){
+  // Por defecto: 1 de septiembre del año de temporada actual (si ya
+  // estamos en septiembre o después, este año; si no, el septiembre
+  // anterior) — coincide con el arranque de temporada de Clean Pools.
+  const now = new Date();
+  const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear()-1;
+  return y+'-09-01';
+}
+function toggleNewSinceFilter(){
+  const bar = document.getElementById('new-since-bar');
+  const pill = document.getElementById('pill-nuevos');
+  if(newSinceDate){
+    // Ya estaba activo → desactivar
+    newSinceDate = null;
+    bar.style.display = 'none';
+    pill.style.background = 'rgba(78,216,160,.1)';
+    pill.style.color = 'var(--green)';
+  } else {
+    newSinceDate = defaultNewSinceCutoff();
+    document.getElementById('new-since-date').value = newSinceDate;
+    bar.style.display = 'flex';
+    pill.style.background = 'var(--green)';
+    pill.style.color = 'var(--c1)';
+  }
+  filterClients();
+}
+function applyNewSinceDate(){
+  newSinceDate = document.getElementById('new-since-date').value || defaultNewSinceCutoff();
+  filterClients();
+}
 function filterClients(){
   const q=document.getElementById('search-in').value.toLowerCase();
   let list=clients.filter(c=>!c.deleted);
   if(sfil==='sinGPS') list=list.filter(c=>!validCoord(c.lat,c.lng));
   else if(sfil) list=list.filter(c=>c.status===sfil);
+  if(newSinceDate) list=list.filter(c=>c.fechaCreacion && c.fechaCreacion.slice(0,10)>=newSinceDate);
   if(q)list=list.filter(c=>c.n.toLowerCase().includes(q)||c.zone.toLowerCase().includes(q));
   // Orden alfabético: antes la lista seguía el orden interno de Supabase
   // (no alfabético), así que navegando la lista completa un cliente
