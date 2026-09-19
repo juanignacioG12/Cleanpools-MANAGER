@@ -63,7 +63,7 @@
 if('serviceWorker' in navigator){
   // ⚠ Subir este número en cada deploy con cambios importantes.
   // Fuerza a que TODOS los clientes descarten la caché vieja.
-  const SW_VERSION = 'cp-v6';
+  const SW_VERSION = 'cp-v5';
   const SW_CODE = `
 const CACHE = '${SW_VERSION}';
 const SHELL = ['./'];
@@ -166,17 +166,17 @@ self.addEventListener('message', e => {
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --c1:#001D39;--c2:#0A4174;--c3:#49769F;--c4:#4E8EA2;--c5:#6EA2B3;--c6:#7BBDE8;--c7:#BDD8E9;
-  --bg:#001D39;--bg2:#021628;--bg3:#0f3554;--card:#0d2d4a;--card2:#0f3554;
+  --bg:#001D39;--bg2:#021628;--card:#0d2d4a;--card2:#0f3554;
   --border:rgba(123,189,232,0.18);--border2:rgba(123,189,232,0.35);
   --pdim:rgba(123,189,232,0.10);
   --text:#EEF6FC;--text2:#BDD8E9;--text3:#4E7A96;
-  --red:#F25C5C;--amber:#F5A623;--green:#4ED8A0;--teal:#2DD4BF;
+  --red:#F25C5C;--amber:#F5A623;--green:#4ED8A0;
   --r:14px;--r2:9px;
   --shadow:none;
 }
 /* ── LIGHT THEME ── */
 html[data-theme="light"]{
-  --bg:#EAF3FB;--bg2:#DDEBF8;--bg3:#F3F9FD;--card:#FFFFFF;--card2:#F3F9FD;
+  --bg:#EAF3FB;--bg2:#DDEBF8;--card:#FFFFFF;--card2:#F3F9FD;
   --border:rgba(10,65,116,0.12);--border2:rgba(10,65,116,0.28);
   --pdim:rgba(73,118,159,0.08);
   --text:#0A2B45;--text2:#2E5A7E;--text3:#7E9DB4;
@@ -325,7 +325,6 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .rconn{position:absolute;left:26px;top:36px;bottom:-10px;width:1.5px;background:linear-gradient(180deg,var(--c4),transparent)}
 .rstop:last-child .rconn{display:none}
 .rnum{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--c3),var(--c4));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--text);flex-shrink:0;margin-top:2px}
-.rnum.rdone{background:linear-gradient(135deg,var(--green),#2fae7d)}
 .ri{flex:1;min-width:0}
 .rn{font-size:13px;font-weight:700;color:var(--text)}
 .ra{font-size:10px;color:var(--text3);margin-top:1px}
@@ -452,9 +451,7 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .cal-day{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);position:relative;border:1px solid transparent;transition:all .15s}
 .cal-day:active{background:var(--pdim)}
 .cal-day.empty{cursor:default}
-.cal-day.sun{background:rgba(242,92,92,0.13);color:var(--red)}
 .cal-day.today{border-color:var(--c6);color:var(--c6)}
-.cal-day.today.sun{border-color:var(--red)}
 .cal-day.sel{background:linear-gradient(135deg,var(--c4),var(--c6));color:var(--c1)}
 .cal-day .dot{width:5px;height:5px;border-radius:50%;background:var(--c6);position:absolute;bottom:5px}
 .cal-day.sel .dot{background:var(--c1)}
@@ -2082,15 +2079,9 @@ function renderToday(){
 }
 function toggleWork(dateKey,idx){
   const e=schedule[dateKey][idx];
-  // Antes esto ciclaba pendiente → en curso → completado (3 toques para
-  // completar en 2 pasos). "En curso" no se podía asignar desde ningún
-  // otro lado y generaba confusión ("toco y no se completa"). Ahora es
-  // directo: un toque completa, otro toque deshace — igual que en la
-  // vista de empleados (empToggleDone).
-  e.status = e.status==='done' ? 'pend' : 'done';
+  e.status = e.status==='done' ? 'pend' : (e.status==='pend' ? 'now' : 'done');
   renderToday();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
-  if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute();
   if(e.supabase_id){
     sb.from('trabajos').update({status:e.status}).eq('id',e.supabase_id)
       .then(({error})=>{ if(error) queueSync('job_status',{dateKey,idx,supabaseId:e.supabase_id,status:e.status}); })
@@ -2436,9 +2427,9 @@ function renderRoute(){
     }
     const distFromBase=validCoord(cl.lat,cl.lng)?haversineKm(basePt,[cl.lat,cl.lng]).toFixed(1)+' km base':'–';
     return `
-    <div class="rstop" style="cursor:pointer" onclick="toggleWork('${routeDate}',${j.idx})" title="Tocar para cambiar el estado (pendiente → en curso → completado)">
+    <div class="rstop">
       <div class="rconn"></div>
-      <div class="rnum ${j.status==='done'?'rdone':''}">${j.status==='done'?'✓':i+1}</div>
+      <div class="rnum">${i+1}</div>
       <div class="ri">
         <div class="rn">${cl.n} ${!validCoord(cl.lat,cl.lng)?'<span style="color:var(--amber);font-size:9px">⚠ Sin GPS</span>':''}</div>
         <div class="ra">${cl.address||cl.zone}${j.time?' · '+j.time:''}</div>
@@ -2447,7 +2438,7 @@ function renderRoute(){
           <span class="rkm">↔ ${distTxt}</span>
           ${statusBadge(j.status)}
         </div>
-        <a class="nav-btn" href="javascript:void(0)" onclick="event.stopPropagation();goNavigate(${cl.lat},${cl.lng})">
+        <a class="nav-btn" href="javascript:void(0)" onclick="goNavigate(${cl.lat},${cl.lng})">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
           Ir · ${distFromBase}
         </a>
@@ -2699,15 +2690,7 @@ function renderCalendar(){
   }).catch(()=>{});
 }
 function renderCalendarPaint(){
-  const titleTxt = MONTH_NAMES[calMonth]+' '+calYear;
-  // El calendario del dashboard (dash-cal-title) y el de la página Agenda
-  // (cal-title) son dos elementos distintos — antes solo se actualizaba
-  // este último, por eso el mes no se veía arriba en el dashboard hasta
-  // tocar un día (que sí refrescaba la fecha por otro lado).
-  const titleEl=document.getElementById('cal-title');
-  const dashTitleEl=document.getElementById('dash-cal-title');
-  if(titleEl) titleEl.textContent=titleTxt;
-  if(dashTitleEl) dashTitleEl.textContent=titleTxt;
+  document.getElementById('cal-title').textContent=MONTH_NAMES[calMonth]+' '+calYear;
   const first=new Date(calYear,calMonth,1);
   const startDow=first.getDay();
   const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
@@ -2717,9 +2700,8 @@ function renderCalendarPaint(){
     const key=calYear+'-'+pad2(calMonth+1)+'-'+pad2(day);
     const isToday=key===TODAY_KEY;
     const isSel=key===selectedDate;
-    const isSun=new Date(calYear,calMonth,day).getDay()===0;
     const cnt=jobsFor(key).length;
-    html+=`<div class="cal-day ${isSun?'sun':''} ${isToday?'today':''} ${isSel?'sel':''}" onclick="selectDay('${key}')">
+    html+=`<div class="cal-day ${isToday?'today':''} ${isSel?'sel':''}" onclick="selectDay('${key}')">
       ${day}
       ${cnt>0?`<span class="cnt">${cnt}</span>`:''}
       ${cnt>0?'<span class="dot"></span>':''}
@@ -2899,10 +2881,6 @@ async function asRemoveFromDay(){
   const c=clients[e.clientId];
   const supabaseId = e.supabase_id;
   if(supabaseId) _borrandoAhora.add(supabaseId);
-  // Si todavía no tiene supabase_id, es porque se está subiendo a la nube
-  // en este mismo momento (ver saveWork()) — marcamos su _lid para que,
-  // apenas termine de subir, se borre sola en vez de quedar fantasma.
-  else if(e._lid) _pendingDeleteLid.add(e._lid);
   schedule[asCtx.dateKey].splice(asCtx.idx,1);
   dbSave();
   closeModal('actions');
@@ -2941,15 +2919,9 @@ async function asRemoveRecurrenceFuture(){
     if(k>=fromKey){
       const antes=schedule[k].length;
       schedule[k].forEach(x=>{
-        if(x.recurrenceId===recId){
-          if(x.supabase_id){
-            supabaseIdsABorrar.push(x.supabase_id);
-            _borrandoAhora.add(x.supabase_id);
-          } else if(x._lid){
-            // Misma protección que en asRemoveFromDay(): todavía se está
-            // subiendo a Supabase, se borrará sola apenas termine.
-            _pendingDeleteLid.add(x._lid);
-          }
+        if(x.recurrenceId===recId && x.supabase_id){
+          supabaseIdsABorrar.push(x.supabase_id);
+          _borrandoAhora.add(x.supabase_id);
         }
       });
       schedule[k]=schedule[k].filter(x=>x.recurrenceId!==recId);
@@ -3266,13 +3238,8 @@ function saveWork(){
   dates.sort();
   dates.forEach(d=>{
     if(!schedule[d])schedule[d]=[];
-    // _lid: identificador local temporal — permite detectar si el usuario
-    // borra esta tarea MIENTRAS todavía se está subiendo a Supabase (ver
-    // _pendingDeleteLid más abajo). Sin esto, borrar una tarea recién
-    // creada muy rápido no alcanzaba a cancelar la subida en curso, y la
-    // tarea "fantasma" quedaba viva en la nube y volvía a aparecer sola.
     schedule[d].push({clientId,time:start,endTime:end,notes,status:'pend',recurrenceId,
-      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid})), _lid:_nextJobLid++});
+      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid}))});
   });
 
   // refresh everything that depends on schedule
@@ -3290,18 +3257,6 @@ function saveWork(){
     (schedule[d]||[]).filter(j=>!j.supabase_id).forEach(async job=>{
       try{
         await saveTrabajoToSupabase(job,d);
-        // El usuario pudo haber borrado esta misma tarea MIENTRAS se
-        // subía (todavía sin supabase_id, así que el borrado no pudo
-        // avisarle a Supabase). Si eso pasó, en vez de dejarla viva en
-        // la nube, la borramos ahora mismo — recién nacida.
-        if(job._lid && _pendingDeleteLid.has(job._lid)){
-          _pendingDeleteLid.delete(job._lid);
-          try{
-            await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id);
-            await sb.from('trabajos').delete().eq('id',job.supabase_id);
-          }catch(e2){ console.warn('[SB] no se pudo limpiar tarea fantasma:',e2); }
-          return;
-        }
         if(assignUserIds.length && job.supabase_id){
           await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id);
           await Promise.all(assignUserIds.map(uid=>
@@ -3325,16 +3280,11 @@ function saveFin(){
   const tipo=document.getElementById('nf-tipo').value;
   const cat=document.getElementById('nf-cat').value;
   const desc=document.getElementById('nf-desc').value.trim()||cat;
-  const t={id:nextTransId++,tipo,cat,monto,desc,fecha:TODAY_KEY,ts:Date.now()};
-  transactions.push(t);
+  transactions.push({id:nextTransId++,tipo,cat,monto,desc,fecha:TODAY_KEY,ts:Date.now()});
   dbSave();
   renderFinanzas();
   closeModal('fin');
   toast((tipo==='ingreso'?'+':'−')+'$'+monto.toLocaleString('es-AR')+' registrado ✓');
-  // Subir a Supabase — así el gasto/ingreso queda guardado en la nube y
-  // sobrevive a un reinstall o "borrar y volver a abrir" la app, en vez
-  // de vivir solo en este teléfono (localStorage/IndexedDB se pierden ahí).
-  saveTransaccionToSupabase(t).catch(e=>{ console.warn('[SB] sync transaccion:',e); queueSync('save_transaccion',{transId:t.id}); toast('⚠ Guardado en el teléfono. Se subirá a la nube apenas se pueda.'); });
 }
 
 // ── PAGE SWITCH ──
@@ -3552,17 +3502,12 @@ function confirmResetStats(){
   openModal('reset-stats');
 }
 function executeResetStats(){
-  const idsToDelete = transactions.map(t=>t.supabase_id).filter(Boolean);
   transactions.length = 0;
   nextTransId = 1;
   dbSave();
   closeModal('reset-stats');
   renderFinanzas();
   toast('✅ Estadísticas reiniciadas. Clientes y agenda sin cambios.');
-  if(idsToDelete.length){
-    sb.from('transacciones').delete().in('id',idsToDelete)
-      .then(({error})=>{ if(error) console.warn('[SB] reset stats cloud:',error); });
-  }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -4140,17 +4085,11 @@ function queueSync(type, payload){
 let _flushingSyncQueue = false;
 async function flushSyncQueue(){
   if(_flushingSyncQueue) return; // evitar corridas superpuestas
+  if(!navigator.onLine) return;
   if(!syncQueue.length) return;
-  // Nota: antes acá se cortaba si navigator.onLine daba false. Se sacó
-  // porque ese valor es poco confiable en muchos celulares/PWAs (a veces
-  // queda marcado "sin internet" aunque sí lo haya), y eso dejaba
-  // cambios pendientes trabados para siempre aunque hubiera conexión.
-  // Ahora se intenta subir directo, y es el resultado real de Supabase
-  // (éxito o error) el que decide si el ítem sigue en la cola.
   _flushingSyncQueue = true;
   const pending = [...syncQueue];
   let okCount = 0;
-  let firstErrorMsg = null;
   for(const item of pending){
     try{
       await runSyncQueueItem(item);
@@ -4160,13 +4099,12 @@ async function flushSyncQueue(){
       item.attempts = (item.attempts||0)+1;
       const idx = syncQueue.findIndex(q=>q.id===item.id);
       if(idx>-1) syncQueue[idx].attempts = item.attempts;
-      if(!firstErrorMsg) firstErrorMsg = (e && (e.message||e.error_description||e.hint)) || JSON.stringify(e);
-      console.warn('[SyncQueue] falló', item.type, e);
+      // Si sigue sin conexión, no tiene sentido seguir intentando los demás ahora
+      if(!navigator.onLine) break;
     }
   }
   saveSyncQueue();
   if(okCount>0) toast('✓ '+okCount+' cambio(s) pendiente(s) sincronizado(s)');
-  else if(firstErrorMsg) toast('⚠ Sync: '+firstErrorMsg);
   _flushingSyncQueue = false;
 }
 
@@ -4196,10 +4134,6 @@ async function runSyncQueueItem(item){
     const {supabaseId,newDate,newTime} = item.payload;
     const {error} = await sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',supabaseId);
     if(error) throw error;
-  } else if(item.type==='save_transaccion'){
-    const t = transactions.find(x=>x.id===item.payload.transId);
-    if(!t) return; // ya no existe (ej: se reiniciaron las estadísticas)
-    await saveTransaccionToSupabase(t);
   }
 }
 
@@ -4371,10 +4305,7 @@ function importBackup(file){
       const ok = confirm('Esto va a REEMPLAZAR las notas y transacciones actuales de este teléfono por las del backup (del '+(data._fecha?new Date(data._fecha).toLocaleString('es-AR'):'?')+').\n\n¿Continuar?');
       if(!ok) return;
       if(Array.isArray(data.notas)){ notas.length=0; notas.push(...data.notas); }
-      if(Array.isArray(data.transactions) && typeof transactions!=='undefined'){
-        transactions.length=0; transactions.push(...data.transactions);
-        transactions.forEach(t=>{ if(!t.supabase_id) saveTransaccionToSupabase(t).catch(e=>queueSync('save_transaccion',{transId:t.id})); });
-      }
+      if(Array.isArray(data.transactions) && typeof transactions!=='undefined'){ transactions.length=0; transactions.push(...data.transactions); }
       dbSaveNow();
       toast('✓ Backup restaurado');
       if(typeof renderNotas==='function') renderNotas();
@@ -5010,7 +4941,6 @@ async function syncFromSupabase(){
       if(mapInit)renderMarkers(clients.filter(c=>!c.deleted));
     }
     await syncTrabajosDelDia();
-    await syncTransaccionesFromSupabase();
     renderToday(); renderDashboard(); renderRoute();
     // ⚠ IMPORTANTE: sin esto, un empleado que abre la app DESPUÉS de que
     // ya le asignaron una tarea (no en el momento) nunca veía el
@@ -5080,11 +5010,6 @@ async function syncTrabajosForMonth(year, month){
 // a agregar — sin esto, una sincronización que llegaba a mitad de camino
 // del borrado "resucitaba" la tarea, y había que borrarla dos veces.
 const _borrandoAhora = new Set();
-// Contador de _lid (identificador local temporal de una tarea recién creada,
-// ver saveWork()) + set de _lid marcados para borrar en cuanto terminen de
-// subirse a Supabase.
-let _nextJobLid = 1;
-const _pendingDeleteLid = new Set();
 
 function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   if(!schedule[dateKey]) schedule[dateKey]=[];
@@ -5281,40 +5206,6 @@ async function saveTrabajoToSupabase(job,dateKey){
     if(data) job.supabase_id=data.id;
     else throw new Error('Supabase no devolvió el ID del trabajo');
   }
-}
-
-async function saveTransaccionToSupabase(t){
-  const p={tipo:t.tipo,categoria:t.cat,monto:t.monto,descripcion:t.desc,fecha:t.fecha,deleted:false,updated_at:new Date().toISOString()};
-  if(t.supabase_id){
-    const {error}=await sb.from('transacciones').update(p).eq('id',t.supabase_id);
-    if(error) throw error;
-  } else {
-    const {data,error}=await sb.from('transacciones').insert(p).select().single();
-    if(error) throw error;
-    if(!data) throw new Error('Supabase no devolvió el ID de la transacción');
-    t.supabase_id=data.id;
-    dbSave(); // persistir el supabase_id asignado, para no duplicar en el próximo sync
-  }
-}
-
-// Trae las transacciones guardadas en la nube y las mezcla con las locales.
-// Así, si el teléfono se reinstaló o se le borraron los datos, los gastos
-// e ingresos vuelven a aparecer apenas se loguea (en vez de perderse).
-async function syncTransaccionesFromSupabase(){
-  const {data:trans, error} = await sb.from('transacciones').select('*').eq('deleted',false).order('id');
-  if(error){ console.warn('[syncTransacciones] error:', error); return; }
-  if(!trans) return;
-  trans.forEach(st=>{
-    const ex = transactions.find(t=>t.supabase_id===st.id);
-    if(ex){
-      ex.tipo=st.tipo; ex.cat=st.categoria; ex.monto=st.monto; ex.desc=st.descripcion; ex.fecha=st.fecha;
-    } else {
-      transactions.push({id:nextTransId++,tipo:st.tipo,cat:st.categoria,monto:st.monto,desc:st.descripcion,
-        fecha:st.fecha,ts:new Date(st.created_at).getTime(),supabase_id:st.id});
-    }
-  });
-  dbSave();
-  if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas();
 }
 
 function renderEmpleadoView(){
