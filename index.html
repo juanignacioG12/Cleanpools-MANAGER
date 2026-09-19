@@ -5325,18 +5325,35 @@ function subscribeRealtime(){
   }).subscribe();
 }
 
+// Si dos cosas necesitan que el MISMO cliente (todavía sin subir) esté en
+// Supabase al mismo tiempo — típicamente: crear un cliente y, sin esperar
+// a que termine de subirse, crear ya una tarea para él — antes se
+// disparaban DOS inserts en paralelo y quedaba duplicado en la nube. Este
+// mapa hace que el segundo (y siguientes) simplemente esperen a que
+// termine la subida que ya está en curso, en vez de arrancar la suya.
+const _clienteUploadInFlight = new Map(); // cl.id -> Promise
 async function saveClienteToSupabase(cl){
-  const p={nombre:cl.n,telefono:cl.phone||'',direccion:cl.address||'',zona:cl.zone,servicio:cl.service,
-    precio:cl.price,lat:cl.lat||null,lng:cl.lng||null,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
-    status:cl.status,deleted:cl.deleted||false,updated_at:new Date().toISOString()};
-  if(cl.supabase_id){
-    const {error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id);
-    if(error) throw error;
-  } else {
-    const {data,error}=await sb.from('clientes').insert(p).select().single();
-    if(error) throw error;
-    if(data) cl.supabase_id=data.id;
+  if(!cl.supabase_id && _clienteUploadInFlight.has(cl.id)){
+    await _clienteUploadInFlight.get(cl.id);
+    return;
   }
+  const doUpload = async () => {
+    const p={nombre:cl.n,telefono:cl.phone||'',direccion:cl.address||'',zona:cl.zone,servicio:cl.service,
+      precio:cl.price,lat:cl.lat||null,lng:cl.lng||null,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
+      status:cl.status,deleted:cl.deleted||false,updated_at:new Date().toISOString()};
+    if(cl.supabase_id){
+      const {error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id);
+      if(error) throw error;
+    } else {
+      const {data,error}=await sb.from('clientes').insert(p).select().single();
+      if(error) throw error;
+      if(data) cl.supabase_id=data.id;
+    }
+  };
+  if(cl.supabase_id){ await doUpload(); return; } // ya existe: un update no necesita el candado
+  const inFlight = doUpload();
+  _clienteUploadInFlight.set(cl.id, inFlight);
+  try{ await inFlight; } finally { _clienteUploadInFlight.delete(cl.id); }
 }
 
 async function saveTrabajoToSupabase(job,dateKey){
