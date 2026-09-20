@@ -5207,6 +5207,12 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   const respuestaConfiable = trabajosDelDia.length > 0 || yaSincronizadas === 0;
   if(!respuestaConfiable) return;
 
+  // El valor editado con "Editar valor" (job.price) es local-only — la
+  // nube no lo sabe. Antes de reconstruir las tareas con lo que llega de
+  // Supabase, guardamos ese valor para no perderlo en la reconstrucción.
+  const preciosLocales = new Map();
+  schedule[dateKey].forEach(j=>{ if(j.supabase_id && j.price!=null) preciosLocales.set(j.supabase_id, j.price); });
+
   const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
   const nuevas=[];
   trabajosDelDia.forEach(t=>{
@@ -5220,7 +5226,8 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
     const asignado=t.asignaciones?.some(a=>a.user_id===currentUser?.id);
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
-      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]});
+      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
+      price:preciosLocales.get(t.id)});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -5262,6 +5269,11 @@ async function syncTrabajosForDate(dateKey){
   // subir (sin supabase_id todavía) — nunca se tocan hasta que suban.
   const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
 
+  // Mismo blindaje que en _mergeTrabajosIntoSchedule: no perder el valor
+  // editado a mano (job.price) cuando se reconstruye desde Supabase.
+  const preciosLocales = new Map();
+  schedule[dateKey].forEach(j=>{ if(j.supabase_id && j.price!=null) preciosLocales.set(j.supabase_id, j.price); });
+
   let _diagAsignados=0, _diagSinCliente=0;
   const nuevas=[];
 
@@ -5276,7 +5288,8 @@ async function syncTrabajosForDate(dateKey){
     if(asignado) _diagAsignados++;
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
-      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[]});
+      notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
+      price:preciosLocales.get(t.id)});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
