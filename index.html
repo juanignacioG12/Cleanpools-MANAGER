@@ -2049,7 +2049,7 @@ function statusBadge(st){
 function renderToday(){
   renderDashboard();
   const jobs=jobsFor(TODAY_KEY);
-  const total=jobs.reduce((a,j)=>a+(j.client.price||0),0);
+  const total=jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
   const done=jobs.filter(j=>j.status==='done').length;
   document.getElementById('m-hoy').textContent='$'+Math.round(total/1000)+'K';
   document.getElementById('m-hoy-s').textContent=done+' de '+jobs.length+' completados';
@@ -2413,7 +2413,7 @@ function renderRoute(){
 
   const rawJobs = jobsFor(routeDate);
   const jobs    = sortJobsByMode(rawJobs, routeSortMode);  // ← sort with GPS
-  const total   = jobs.reduce((a,j)=>a+(j.client.price||0),0);
+  const total   = jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
 
   // Real distance using haversine from base
   const base = baseLocation || ZONE_CENTERS['Capital'];
@@ -2559,7 +2559,7 @@ function generarRecorrido(){
   if(_recorridoJobs.length) totalKm += haversineKm(prevPt, basePt);
 
   const totalMin  = Math.round(totalKm/30*60) + _recorridoJobs.length * 15;
-  const totalFact = _recorridoJobs.reduce((a,j)=>a+(j.client.price||0),0);
+  const totalFact = _recorridoJobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
 
   // Actualizar métricas del panel
   document.getElementById('rc-paradas').textContent = _recorridoJobs.length;
@@ -4699,7 +4699,7 @@ function renderDashboardPaint(){
     const [y,m,d] = k.split('-').map(Number);
     const kd = new Date(y,m-1,d);
     const jobs = (schedule[k]||[]).filter(e=>!clients[e.clientId]?.deleted);
-    const income = jobs.reduce((a,e)=>(clients[e.clientId]?.price||0)+a, 0);
+    const income = jobs.reduce((a,e)=>(e.price??clients[e.clientId]?.price??0)+a, 0);
     if(kd>=weekStart && kd<=weekEnd){  weekIncome+=income; weekJobs+=jobs.length; }
     if(kd>=monthStart && kd<=monthEnd){ monthIncome+=income; monthJobs+=jobs.length; }
   });
@@ -5406,26 +5406,44 @@ async function saveClienteToSupabase(cl){
   try{ await inFlight; } finally { _clienteUploadInFlight.delete(cl.id); }
 }
 
+// Mismo problema que existía con los clientes (ver _clienteUploadInFlight):
+// si dos cosas intentan subir la MISMA tarea todavía sin supabase_id al
+// mismo tiempo — típicamente, crear varias tareas seguidas sin esperar a
+// que la anterior termine de subir, ya que el bucle de saveWork() vuelve a
+// escanear TODAS las pendientes en cada tarea nueva — se generaban
+// inserts duplicados en Supabase para la misma tarea local.
+const _trabajoUploadInFlight = new Map(); // job._lid -> Promise
 async function saveTrabajoToSupabase(job,dateKey){
-  const cl=clients[job.clientId];
-  if(!cl){
-    console.error('[DEBUG cliente no encontrado]', 'job.clientId:', job.clientId, 'clients.length:', clients.length, 'job:', JSON.stringify(job));
-    throw new Error('Cliente no encontrado. clientId='+job.clientId+', total clientes='+clients.length);
+  const key = job._lid;
+  if(!job.supabase_id && key!=null && _trabajoUploadInFlight.has(key)){
+    await _trabajoUploadInFlight.get(key);
+    return;
   }
-  // Asegurar que el cliente existe en Supabase primero
-  if(!cl.supabase_id) await saveClienteToSupabase(cl);
-  if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
-  const p={cliente_id:cl.supabase_id,fecha:dateKey,hora_inicio:job.time||'',hora_fin:job.endTime||'',
-    notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,updated_at:new Date().toISOString()};
-  if(job.supabase_id){
-    const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
-    if(error) throw error;
-  } else {
-    const {data,error}=await sb.from('trabajos').insert(p).select().single();
-    if(error) throw error;
-    if(data) job.supabase_id=data.id;
-    else throw new Error('Supabase no devolvió el ID del trabajo');
-  }
+  const doUpload = async () => {
+    const cl=clients[job.clientId];
+    if(!cl){
+      console.error('[DEBUG cliente no encontrado]', 'job.clientId:', job.clientId, 'clients.length:', clients.length, 'job:', JSON.stringify(job));
+      throw new Error('Cliente no encontrado. clientId='+job.clientId+', total clientes='+clients.length);
+    }
+    // Asegurar que el cliente existe en Supabase primero
+    if(!cl.supabase_id) await saveClienteToSupabase(cl);
+    if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
+    const p={cliente_id:cl.supabase_id,fecha:dateKey,hora_inicio:job.time||'',hora_fin:job.endTime||'',
+      notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,updated_at:new Date().toISOString()};
+    if(job.supabase_id){
+      const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
+      if(error) throw error;
+    } else {
+      const {data,error}=await sb.from('trabajos').insert(p).select().single();
+      if(error) throw error;
+      if(data) job.supabase_id=data.id;
+      else throw new Error('Supabase no devolvió el ID del trabajo');
+    }
+  };
+  if(job.supabase_id || key==null){ await doUpload(); return; } // update, o sin _lid: sin candado posible
+  const inFlight = doUpload();
+  _trabajoUploadInFlight.set(key, inFlight);
+  try{ await inFlight; } finally { _trabajoUploadInFlight.delete(key); }
 }
 
 async function saveTransaccionToSupabase(t){
@@ -5775,7 +5793,7 @@ function exportAgendaWhatsApp(){
     if(validCoord(cl.lat,cl.lng)) msg+='🗺 https://maps.google.com/?q='+cl.lat+','+cl.lng+'\n';
     msg+='\n';
   });
-  const total=jobs.reduce((a,j)=>a+(j.client.price||0),0);
+  const total=jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
   msg+='─────────────────\n💰 Total: $'+total.toLocaleString('es-AR')+'\n📊 '+jobs.length+' paradas';
   if(navigator.share){
     navigator.share({title:'Agenda Clean Pools SJ',text:msg}).catch(()=>window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'));
