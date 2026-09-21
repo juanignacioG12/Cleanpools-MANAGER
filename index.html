@@ -2822,7 +2822,7 @@ function renderAgendaListPaint(key){
         <div>
           <div class="jcard-time">${j.time||'--:--'} ${j.status==='done'?'✓':''}</div>
           <div class="jcard-name">${c.n}</div>
-          <div class="jcard-svc">${c.service}</div>
+          <div class="jcard-svc">${c.service} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
           ${c.address?`<div class="jcard-addr">📍 ${c.address}</div>`:''}
           ${j.notes?`<div class="jcard-notes">📝 ${j.notes}</div>`:''}
           ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:3px;font-weight:700">${j.assignLabel}</div>`:''}
