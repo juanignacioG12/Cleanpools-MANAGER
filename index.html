@@ -4348,6 +4348,14 @@ setInterval(flushSyncQueue, 30000); // reintento periódico (además del evento 
 setInterval(()=>{
   if(currentUser && document.visibilityState==='visible') syncFromSupabase().catch(()=>{});
 }, 25000);
+// El intervalo de arriba se pausa solo cuando el celular bloquea la
+// pantalla o la app pasa a segundo plano (así ahorra batería) — pero eso
+// significa que, al volver, podían pasar hasta 25s (o más, según el
+// celular) hasta verse al día. Con esto, apenas la pantalla vuelve a
+// estar activa, sincroniza al toque en vez de esperar el intervalo.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && currentUser) syncFromSupabase().catch(()=>{});
+});
 let nextTransId = 1;
 
 // ════════════════════════════════════════════════════════════
