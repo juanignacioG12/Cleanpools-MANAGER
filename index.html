@@ -2870,7 +2870,8 @@ function saveEditPrice(){
   if(!asCtx)return;
   const val=parseInt(document.getElementById('ep-price').value);
   if(!val){toast('⚠ Ingresá un valor');return;}
-  const e=schedule[asCtx.dateKey][asCtx.idx];
+  const {dateKey,idx}=asCtx;
+  const e=schedule[dateKey][idx];
   e.price=val;
   dbSave();
   closeModal('editprice');
@@ -2880,10 +2881,14 @@ function saveEditPrice(){
   if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas();
   toast('✓ Valor de esta limpieza actualizado');
   asCtx=null;
-  // Nota: el valor por-trabajo vive solo en este teléfono por ahora (no se
-  // sube a Supabase todavía) — la tabla "trabajos" en la nube no tiene una
-  // columna para esto. Si en algún momento se quiere que viaje entre
-  // dispositivos, hay que agregar la columna "precio" primero.
+  // Ahora sí se sube a Supabase (columna "precio" en trabajos), para que
+  // se vea igual en todos los dispositivos y no solo en este teléfono.
+  if(e.supabase_id){
+    saveTrabajoToSupabase(e, dateKey).catch(err=>{
+      console.warn('[SB] sync precio:',err);
+      toast('⚠ El valor se guardó acá, pero no se pudo subir a la nube todavía');
+    });
+  }
 }
 function asEditClient(){
   if(!asCtx)return;
@@ -4333,6 +4338,16 @@ function updateSyncBadge(){
 
 window.addEventListener('online', flushSyncQueue);
 setInterval(flushSyncQueue, 30000); // reintento periódico (además del evento 'online', poco confiable en mobile)
+
+// Antes la app solo traía datos frescos de la nube al iniciar sesión —
+// si 2 o 3 celulares quedaban abiertos al mismo tiempo (varios admins o
+// el mismo admin en varios teléfonos), ninguno se enteraba de lo que
+// cambiaban los demás (tareas nuevas, valores editados, etc.) hasta
+// cerrar y volver a abrir la app. Ahora, mientras la app está abierta y
+// hay sesión iniciada, se refresca todo cada 25 segundos.
+setInterval(()=>{
+  if(currentUser && document.visibilityState==='visible') syncFromSupabase().catch(()=>{});
+}, 25000);
 let nextTransId = 1;
 
 // ════════════════════════════════════════════════════════════
@@ -5227,7 +5242,7 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:preciosLocales.get(t.id)});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id))});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -5289,7 +5304,7 @@ async function syncTrabajosForDate(dateKey){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:preciosLocales.get(t.id)});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id))});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
@@ -5429,7 +5444,8 @@ async function saveTrabajoToSupabase(job,dateKey){
     if(!cl.supabase_id) await saveClienteToSupabase(cl);
     if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
     const p={cliente_id:cl.supabase_id,fecha:dateKey,hora_inicio:job.time||'',hora_fin:job.endTime||'',
-      notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,updated_at:new Date().toISOString()};
+      notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,
+      precio:job.price??null,updated_at:new Date().toISOString()};
     if(job.supabase_id){
       const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
       if(error) throw error;
