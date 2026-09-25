@@ -1734,6 +1734,15 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 // cargan dinámicamente vía syncFromSupabase() al iniciar sesión.)
 const AV=['a1','a2','a3','a4','a5','a6'];
 const clients=[]; // se llena dinámicamente desde Supabase (ver syncFromSupabase())
+// Antes casi todo el código buscaba un cliente con clients[id], asumiendo
+// que la posición en el array SIEMPRE coincide con su id. Eso se rompía
+// con el tiempo (ver comentario en mapSbCliente) y causaba que se
+// mostrara un cliente totalmente distinto al esperado. Esta función
+// busca por el id real del cliente, sin importar su posición.
+function getClientById(id){
+  if(id==null) return undefined;
+  return clients.find(c=>c.id===id);
+}
 let nextClientId=clients.length;
 let _editingClientSnapshot = null; // huella del cliente al abrir edición (detección de conflictos)
 // Approx geographic centers per zone (San Juan, AR) used as fallback
@@ -1885,7 +1894,7 @@ function mapSearchExec(){
     </div>`).join('');
 }
 function mapFocusClient(id){
-  const c=clients[id];
+  const c=getClientById(id);
   if(!c||!validCoord(c.lat,c.lng))return;
   if(!mapInit)initMap();
   map.setView([c.lat,c.lng],16);
@@ -1949,7 +1958,7 @@ function renderPlannerStops(){
   const el=document.getElementById('planner-stops');
   if(!plannerStops.length){el.innerHTML='<div style="font-size:11px;color:var(--text3)">Sin paradas seleccionadas</div>';return;}
   el.innerHTML=plannerStops.map((id,i)=>{
-    const c=clients[id];
+    const c=getClientById(id);
     return `<div class="planner-stop">
       <div class="planner-stop-num">${i+1}</div>
       <div class="planner-stop-name">${c?c.n:'?'}</div>
@@ -1974,7 +1983,7 @@ function plannerClear(){
 // Nearest-neighbor TSP greedy (minimiza km sin API externa)
 function tspNearestNeighbor(ids){
   if(!ids.length)return ids;
-  const clist=ids.map(id=>clients[id]).filter(Boolean);
+  const clist=ids.map(id=>getClientById(id)).filter(Boolean);
   if(clist.length<=2)return ids;
   const unvisited=[...clist];
   const ordered=[unvisited.shift()]; // start with first selected
@@ -1994,7 +2003,7 @@ function estRouteKm(ids){
   if(ids.length<2)return 0;
   let km=0;
   for(let i=0;i<ids.length-1;i++){
-    const a=clients[ids[i]], b=clients[ids[i+1]];
+    const a=getClientById(ids[i]), b=getClientById(ids[i+1]);
     if(a&&b&&validCoord(a.lat,a.lng)&&validCoord(b.lat,b.lng)) km+=haversineKm([a.lat,a.lng],[b.lat,b.lng]);
   }
   return km;
@@ -2010,13 +2019,13 @@ function plannerOptimize(){
 }
 function drawPlannerRoute(){
   if(plannerRouteLayer){map.removeLayer(plannerRouteLayer);plannerRouteLayer=null;}
-  const pts=plannerStops.map(id=>clients[id]).filter(c=>c&&validCoord(c.lat,c.lng)).map(c=>[c.lat,c.lng]);
+  const pts=plannerStops.map(id=>getClientById(id)).filter(c=>c&&validCoord(c.lat,c.lng)).map(c=>[c.lat,c.lng]);
   if(pts.length<2)return;
   plannerRouteLayer=L.polyline(pts,{color:'#7BBDE8',weight:3,opacity:.9,dashArray:'8,5'}).addTo(map);
   map.fitBounds(plannerRouteLayer.getBounds(),{padding:[60,60]});
 }
 function plannerNavigate(){
-  const stops=plannerStops.map(id=>clients[id]).filter(c=>c&&validCoord(c.lat,c.lng));
+  const stops=plannerStops.map(id=>getClientById(id)).filter(c=>c&&validCoord(c.lat,c.lng));
   if(!stops.length){toast('No hay paradas válidas');return;}
   if(stops.length===1){goNavigate(stops[0].lat,stops[0].lng);return;}
   const dest=stops[stops.length-1];
@@ -2038,7 +2047,7 @@ function buildRoute(){
 
 // ── TODAY (Today View, default startup) ──
 function jobsFor(dateKey){
-  return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:clients[e.clientId]}))
+  return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:getClientById(e.clientId)}))
     .filter(j=>j.client && !j.client.deleted);
 }
 function statusBadge(st){
@@ -2117,7 +2126,7 @@ let sfil=null;
 
 // ── HISTORIAL DE VISITAS POR CLIENTE ──
 function showClientHistory(clientId){
-  const cl = clients[clientId];
+  const cl = getClientById(clientId);
   if(!cl) return;
   window._histClientId = clientId;
 
@@ -2852,7 +2861,7 @@ let asCtx=null; // {dateKey, idx}
 function openActions(dateKey,idx){
   asCtx={dateKey,idx};
   const e=schedule[dateKey][idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   document.getElementById('as-title').textContent=c.n;
   document.getElementById('as-remove-future').style.display = e.recurrenceId ? 'flex' : 'none';
   openModal('actions');
@@ -2860,7 +2869,7 @@ function openActions(dateKey,idx){
 function asEditPrice(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   document.getElementById('ep-name').value=c.n;
   document.getElementById('ep-price').value=e.price??c.price;
   closeModal('actions');
@@ -2899,7 +2908,7 @@ function asEditClient(){
 function asReschedule(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   document.getElementById('rs-name').value=c.n;
   document.getElementById('rs-date').value=asCtx.dateKey;
   document.getElementById('rs-time').value=e.time||'';
@@ -2952,7 +2961,7 @@ function saveResched(){
 function asNotes(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   document.getElementById('nt-name').value=c.n;
   document.getElementById('nt-notes').value=e.notes||'';
   closeModal('actions');
@@ -2972,7 +2981,7 @@ function saveNotes(){
 async function asRemoveFromDay(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   const supabaseId = e.supabase_id;
   if(supabaseId) _borrandoAhora.add(supabaseId);
   // Si todavía no tiene supabase_id, es porque se está subiendo a la nube
@@ -3007,7 +3016,7 @@ async function asRemoveFromDay(){
 async function asRemoveRecurrenceFuture(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
-  const c=clients[e.clientId];
+  const c=getClientById(e.clientId);
   const recId=e.recurrenceId;
   const fromKey=asCtx.dateKey;
   if(!recId)return;
@@ -3063,7 +3072,7 @@ let confirmCtx=null;
 // nunca cambia, y por eso es preferible siempre que esté disponible).
 function resolveClientId(param){
   if(typeof param === 'string' && param.includes('-')){
-    return clients.findIndex(c=>c.supabase_id===param);
+    return clients.find(c=>c.supabase_id===param)?.id ?? -1;
   }
   const n = Number(param);
   return Number.isInteger(n) ? n : -1;
@@ -3080,7 +3089,7 @@ function confirmDeleteTrans(id){
 }
 function confirmDeleteClient(clientId){
   const id = resolveClientId(clientId);
-  const c=clients[id];
+  const c=getClientById(id);
   if(!c){
     toast('⚠ Este cliente ya no existe — la lista se va a actualizar');
     filterClients();
@@ -3095,8 +3104,8 @@ function confirmDeleteClient(clientId){
 function confirmYes(){
   if(!confirmCtx)return;
   if(confirmCtx.type==='client'){    const id=confirmCtx.id;
-    const c=clients[id];
-    clients[id].deleted=true;
+    const c=getClientById(id);
+    getClientById(id).deleted=true;
     // remove from all schedule days
     Object.keys(schedule).forEach(k=>{
       schedule[k]=schedule[k].filter(e=>e.clientId!==id);
@@ -3339,7 +3348,7 @@ function saveWork(){
   const existingCl = clients.find(x=>!x.deleted && x.n.toLowerCase()===name.toLowerCase());
   const realZone = existingCl ? existingCl.zone : (document.getElementById('nw-zone')?.value || 'Capital');
   const clientId = findOrCreateClient(name, realZone, svc, price, '');
-  const cl = clients[clientId];
+  const cl = getClientById(clientId);
   if(cl){ cl.service=svc; cl.price=price; }
 
   const recurrenceId = recurType!=='none' ? ('rec-'+Date.now()) : null;
@@ -3593,7 +3602,7 @@ function renderFinanzas(){
   let scheduleIncome = 0, scheduleJobs = 0;
   Object.keys(schedule).filter(k=>k>=from&&k<=to).forEach(k=>{
     (schedule[k]||[]).filter(e=>e.status==='done').forEach(e=>{
-      const cl = clients[e.clientId];
+      const cl = getClientById(e.clientId);
       if(cl && !cl.deleted){ scheduleIncome += (e.price??cl.price??0); scheduleJobs++; }
     });
   });
@@ -3620,7 +3629,7 @@ function renderFinanzas(){
   const bySvc = {};
   Object.keys(schedule).filter(k=>k>=from&&k<=to).forEach(k=>{
     (schedule[k]||[]).filter(e=>e.status==='done').forEach(e=>{
-      const cl = clients[e.clientId];
+      const cl = getClientById(e.clientId);
       if(!cl||cl.deleted) return;
       const svc = cl.service || 'Sin categoría';
       if(!bySvc[svc]) bySvc[svc] = {count:0,total:0};
@@ -4090,7 +4099,7 @@ function fabNewCliente(){
 }
 function editClient(idParam){
   const id = resolveClientId(idParam);
-  const c=clients[id];
+  const c=getClientById(id);
   if(!c||c.deleted){
     toast('⚠ Este cliente ya no existe — la lista se va a actualizar');
     filterClients();
@@ -4168,7 +4177,7 @@ async function saveCliente(){
   }
 
   if(editId!==''){
-    const c=clients[parseInt(editId)];
+    const c=getClientById(parseInt(editId));
     // ⚠ La verificación de conflicto (¿otro dispositivo lo modificó
     // mientras lo editabas?) ahora corre en SEGUNDO PLANO, después de
     // aplicar el cambio — antes se esperaba una consulta a Supabase antes
@@ -4203,14 +4212,14 @@ async function saveCliente(){
     else toast('✓ '+nombre+' agregado como cliente');
   }
   // marcar como editado para que dbSave lo persista
-  if(editId!=='') clients[parseInt(editId)]._edited = true;
+  if(editId!=='') getClientById(parseInt(editId))._edited = true;
   filterClients();
   if(mapInit){ renderMarkers(clients.filter(c=>!c.deleted)); if(map) map.invalidateSize(); }
   renderRoute();
   renderDashboard();
   dbSaveAndRefresh();
   // Sync a Supabase si hay conexión
-  const savedCl = editId!=='' ? clients[parseInt(editId)] : clients[clients.length-1];
+  const savedCl = editId!=='' ? getClientById(parseInt(editId)) : clients[clients.length-1];
   if(savedCl) saveClienteToSupabase(savedCl).catch(e=>{ console.warn('[SB] sync cliente:',e); queueSync('save_cliente',{clientId:savedCl.id}); });
   closeModal('cliente');
   resetClienteForm();
@@ -4306,7 +4315,7 @@ async function runSyncQueueItem(item){
       await saveTrabajoToSupabase(job, dateKey);
     }
   } else if(item.type==='save_cliente'){
-    const cl = clients[item.payload.clientId];
+    const cl = getClientById(item.payload.clientId);
     if(!cl) return; // cliente ya no existe
     await saveClienteToSupabase(cl);
   } else if(item.type==='reschedule'){
@@ -4721,8 +4730,8 @@ function renderDashboardPaint(){
   Object.keys(schedule).forEach(k=>{
     const [y,m,d] = k.split('-').map(Number);
     const kd = new Date(y,m-1,d);
-    const jobs = (schedule[k]||[]).filter(e=>!clients[e.clientId]?.deleted);
-    const income = jobs.reduce((a,e)=>(e.price??clients[e.clientId]?.price??0)+a, 0);
+    const jobs = (schedule[k]||[]).filter(e=>!getClientById(e.clientId)?.deleted);
+    const income = jobs.reduce((a,e)=>(e.price??getClientById(e.clientId)?.price??0)+a, 0);
     if(kd>=weekStart && kd<=weekEnd){  weekIncome+=income; weekJobs+=jobs.length; }
     if(kd>=monthStart && kd<=monthEnd){ monthIncome+=income; monthJobs+=jobs.length; }
   });
@@ -4752,7 +4761,7 @@ function updateLastVisits(){
   clients.forEach(c=>{ c._lastVisitDate=null; });
   Object.keys(schedule).sort().forEach(k=>{
     (schedule[k]||[]).forEach(e=>{
-      const cl = clients[e.clientId];
+      const cl = getClientById(e.clientId);
       if(cl && e.status==='done'){
         if(!cl._lastVisitDate || k > cl._lastVisitDate) cl._lastVisitDate = k;
       }
@@ -5108,15 +5117,8 @@ async function syncFromSupabase(){
         let ex = clients.find(c=>c.supabase_id===sc.id);
         if(!ex) ex = clients.find(c=>!c.deleted && normName(c.n)===normName(sc.nombre));
         if(ex){
-          // ⚠ CRÍTICO: mapSbCliente() SIEMPRE genera un id nuevo (para
-          // clientes recién vistos). Si este cliente YA existía, hay que
-          // conservar su id de posición actual — sobreescribirlo rompía
-          // la relación id=posición en el array para TODOS los clientes
-          // ya conocidos, en cada sincronización, causando "cliente no
-          // encontrado" en cascada a medida que pasaba el día.
-          const idPrevio = ex.id;
-          Object.assign(ex, mapSbCliente(sc));
-          ex.id = idPrevio;
+          // Ya existía localmente: reusar su id (ver comentario en mapSbCliente)
+          Object.assign(ex, mapSbCliente(sc, ex.id));
           ex.supabase_id = sc.id;
         } else {
           clients.push(mapSbCliente(sc));
@@ -5170,8 +5172,18 @@ async function syncFromSupabase(){
   }
 }
 
-function mapSbCliente(sc){
-  const id=nextClientId++;
+// ⚠ CRÍTICO: recibe existingId para el caso "este cliente ya existe
+// localmente, solo actualizar sus datos". Antes, en ESE caso, igual se
+// generaba un id nuevo con nextClientId++ y se descartaba enseguida
+// (sobreescrito por el id real) — pero el contador seguía subiendo sin
+// que el array de clientes creciera a la par. Con el tiempo, nextClientId
+// quedaba muy por delante de clients.length, así que un cliente NUEVO
+// creado después recibía un id que, como array de clientes usa el id
+// como posición (clients[id]), apuntaba a una posición YA OCUPADA por
+// otro cliente distinto — esa es la causa real de "cargo un cliente y me
+// aparece otro": no era un error de pantalla, era esto.
+function mapSbCliente(sc, existingId){
+  const id = existingId ?? nextClientId++;
   return {supabase_id:sc.id,n:sc.nombre,zone:sc.zona||'Capital',service:sc.servicio||'Mant. semanal',
     price:sc.precio||0,lat:sc.lat,lng:sc.lng,address:sc.direccion||sc.zona||'',phone:sc.telefono||'',
     notes:sc.notas||'',googleMapsUrl:sc.google_maps_url||'',status:sc.status||'activo',deleted:sc.deleted||false,
@@ -5353,9 +5365,8 @@ function subscribeRealtime(){
       let ex=clients.find(c=>c.supabase_id===nr.id);
       if(!ex) ex=clients.find(c=>!c.deleted&&normName(c.n)===normName(nr.nombre));
       if(ex){
-        const idPrevio = ex.id;
-        Object.assign(ex, mapSbCliente(nr));
-        ex.id = idPrevio;
+        // Ya existía localmente: reusar su id (ver comentario en mapSbCliente)
+        Object.assign(ex, mapSbCliente(nr, ex.id));
         ex.supabase_id = nr.id;
       } else {
         clients.push(mapSbCliente(nr));
@@ -5443,7 +5454,7 @@ async function saveTrabajoToSupabase(job,dateKey){
     return;
   }
   const doUpload = async () => {
-    const cl=clients[job.clientId];
+    const cl=getClientById(job.clientId);
     if(!cl){
       console.error('[DEBUG cliente no encontrado]', 'job.clientId:', job.clientId, 'clients.length:', clients.length, 'job:', JSON.stringify(job));
       throw new Error('Cliente no encontrado. clientId='+job.clientId+', total clientes='+clients.length);
@@ -5890,7 +5901,7 @@ async function deleteUser(){
 async function openAsignar(dateKey,idx){
   const e=schedule[dateKey][idx];
   if(!e){ toast('⚠ Trabajo no encontrado'); return; }
-  const cl=clients[e.clientId];
+  const cl=getClientById(e.clientId);
 
   // Mostrar info del trabajo
   document.getElementById('asig-job-info').value=(cl?.n||'?')+' · '+(e.time||'sin hora')+' · '+dateKey;
@@ -5925,7 +5936,7 @@ async function saveAsignacion(){
   if(!e){ toast('⚠ Trabajo no encontrado'); closeModal('asignar'); return; }
 
   const userId=document.getElementById('asig-user-select').value;
-  const cl=clients[e.clientId];
+  const cl=getClientById(e.clientId);
 
   // Mostrar estado de carga
   const btnConfirm=document.querySelector('#modal-asignar .bconfirm');
@@ -6060,7 +6071,7 @@ function runDeduplication(){
 
 // Genera URL de Google Calendar para un evento individual
 function buildGCalUrl(job, dateKey){
-  const cl = clients[job.clientId];
+  const cl = getClientById(job.clientId);
   if(!cl) return null;
 
   const [y,m,d] = dateKey.split('-').map(Number);
