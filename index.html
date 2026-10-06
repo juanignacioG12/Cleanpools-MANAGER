@@ -2138,7 +2138,15 @@ function showClientHistory(clientId){
   if(cl.address)  info.push('📍 '+cl.address);
   if(cl.zone)     info.push('🗺 '+cl.zone);
   if(cl.service)  info.push('🔧 '+cl.service);
+  if(cl.servicios && cl.servicios.length) info.push('✅ '+cl.servicios.join(', '));
   if(cl.price)    info.push('💰 $'+cl.price.toLocaleString('es-AR')+'/visita');
+  if(cl.pileta){
+    const p=cl.pileta; const medidas=[p.largo,p.ancho,p.profundidad].filter(Boolean);
+    const partes=[];
+    if(medidas.length) partes.push(medidas.join(' x ')+' m');
+    if(p.material) partes.push(p.material);
+    if(partes.length) info.push('🏊 '+partes.join(' · '));
+  }
   if(cl.notes)    info.push('📝 '+cl.notes);
   document.getElementById('hist-client-info').innerHTML = info.join('<br>');
 
@@ -2175,6 +2183,7 @@ function showClientHistory(clientId){
         <div class="hist-info">
           <div class="hist-date">${dateStr} ${v.time?'· '+v.time:''}</div>
           <div class="hist-svc">${cl.service} · <span style="color:${v.status==='done'?'var(--green)':'var(--text3)'}">${stLabel}</span></div>
+          ${(v.acidoLitros!=null||v.duracionMin!=null)?'<div class="hist-notes">🧪 '+(v.acidoLitros!=null?v.acidoLitros+' L':'')+(v.acidoLitros!=null&&v.duracionMin!=null?' · ':'')+(v.duracionMin!=null?'⏱ '+v.duracionMin+' min':'')+'</div>':''}
           ${v.notes?'<div class="hist-notes">📝 '+v.notes+'</div>':''}
         </div>
         <div style="font-size:11px;font-weight:800;color:var(--c6);flex-shrink:0">
@@ -2865,6 +2874,38 @@ function openActions(dateKey,idx){
   document.getElementById('as-title').textContent=c.n;
   document.getElementById('as-remove-future').style.display = e.recurrenceId ? 'flex' : 'none';
   openModal('actions');
+}
+function asEditDetalleLimpieza(){
+  if(!asCtx)return;
+  const e=schedule[asCtx.dateKey][asCtx.idx];
+  const c=getClientById(e.clientId);
+  document.getElementById('dl-name').value=c.n;
+  document.getElementById('dl-acido').value=e.acidoLitros??'';
+  document.getElementById('dl-tiempo').value=e.duracionMin??'';
+  closeModal('actions');
+  openModal('detlimp');
+}
+function saveDetalleLimpieza(){
+  if(!asCtx)return;
+  const {dateKey,idx}=asCtx;
+  const e=schedule[dateKey][idx];
+  const acido = document.getElementById('dl-acido').value;
+  const tiempo = document.getElementById('dl-tiempo').value;
+  e.acidoLitros = acido!=='' ? parseFloat(acido.replace(',','.')) : null;
+  e.duracionMin = tiempo!=='' ? parseInt(tiempo) : null;
+  dbSave();
+  closeModal('detlimp');
+  toast('✓ Detalle de la limpieza guardado');
+  asCtx=null;
+  // Igual que con el valor editado: se sube a Supabase (columnas
+  // acido_litros / duracion_min en trabajos) si el trabajo ya está
+  // sincronizado.
+  if(e.supabase_id){
+    saveTrabajoToSupabase(e, dateKey).catch(err=>{
+      console.warn('[SB] sync detalle limpieza:',err);
+      toast('⚠ Se guardó acá, pero no se pudo subir a la nube todavía');
+    });
+  }
 }
 function asEditPrice(){
   if(!asCtx)return;
@@ -4089,6 +4130,13 @@ function resetClienteForm(){
   document.getElementById('nc-notas').value='';
   document.getElementById('nc-zona').selectedIndex=0;
   document.getElementById('nc-svc').selectedIndex=0;
+  document.getElementById('nc-svc-limpieza').checked=false;
+  document.getElementById('nc-svc-mantenimiento').checked=false;
+  document.getElementById('nc-svc-reparacion').checked=false;
+  document.getElementById('nc-pil-largo').value='';
+  document.getElementById('nc-pil-ancho').value='';
+  document.getElementById('nc-pil-prof').value='';
+  document.getElementById('nc-pil-material').value='';
   document.getElementById('mtitle-cliente').textContent='Nuevo Cliente';
   document.getElementById('nc-delete-wrap').style.display='none';
   locResetPreview();
@@ -4117,6 +4165,14 @@ function editClient(idParam){
   document.getElementById('nc-svc').value=c.service;
   document.getElementById('nc-precio').value=c.price;
   document.getElementById('nc-notas').value=c.notes||'';
+  const svcs = c.servicios||[];
+  document.getElementById('nc-svc-limpieza').checked = svcs.includes('Limpieza total');
+  document.getElementById('nc-svc-mantenimiento').checked = svcs.includes('Mantenimiento');
+  document.getElementById('nc-svc-reparacion').checked = svcs.includes('Reparación');
+  document.getElementById('nc-pil-largo').value = c.pileta?.largo ?? '';
+  document.getElementById('nc-pil-ancho').value = c.pileta?.ancho ?? '';
+  document.getElementById('nc-pil-prof').value = c.pileta?.profundidad ?? '';
+  document.getElementById('nc-pil-material').value = c.pileta?.material ?? '';
   document.getElementById('mtitle-cliente').textContent='Editar Cliente';
   document.getElementById('nc-delete-wrap').style.display='block';
   openModal('cliente');
@@ -4163,6 +4219,15 @@ async function saveCliente(){
   const tel = document.getElementById('nc-tel').value.trim();
   const dir = document.getElementById('nc-dir').value.trim();
   const notas = document.getElementById('nc-notas').value.trim();
+  const servicios = [];
+  if(document.getElementById('nc-svc-limpieza').checked) servicios.push('Limpieza total');
+  if(document.getElementById('nc-svc-mantenimiento').checked) servicios.push('Mantenimiento');
+  if(document.getElementById('nc-svc-reparacion').checked) servicios.push('Reparación');
+  const pilLargo = parseFloat(document.getElementById('nc-pil-largo').value.replace(',','.'))||null;
+  const pilAncho = parseFloat(document.getElementById('nc-pil-ancho').value.replace(',','.'))||null;
+  const pilProf = parseFloat(document.getElementById('nc-pil-prof').value.replace(',','.'))||null;
+  const pilMaterial = document.getElementById('nc-pil-material').value||'';
+  const pileta = (pilLargo||pilAncho||pilProf||pilMaterial) ? {largo:pilLargo,ancho:pilAncho,profundidad:pilProf,material:pilMaterial} : null;
 
   // Leer coords: campos visibles son fuente primaria (el usuario puede haberlos editado)
   // Normalizar coma decimal → punto antes de parseFloat
@@ -4198,6 +4263,7 @@ async function saveCliente(){
     }
     _editingClientSnapshot = null;
     c.n=nombre;c.zone=zona;c.service=svc;c.price=precio;c.phone=tel;c.address=dir||zona;c.notes=notas;
+    c.servicios=servicios;c.pileta=pileta;
     c.av=nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
     if(hasCoords){c.lat=latVal;c.lng=lngVal;c.googleMapsUrl=mapsUrl;}
     toast('✓ '+nombre+' actualizado');
@@ -4207,7 +4273,7 @@ async function saveCliente(){
     const coords = hasCoords ? [latVal,lngVal] : jitterCoord(zona,id);
     clients.push({n:nombre,zone:zona,service:svc,price:precio,status:'activo',av,avc:AV[id%AV.length],
       last:'hoy',lat:coords[0],lng:coords[1],id,phone:tel,address:dir||zona,notes:notas,deleted:false,
-      googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString()});
+      googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString(),servicios,pileta});
     if(!hasCoords) toast('✓ '+nombre+' agregado (ubicación aproximada por zona — podés ajustarla editando el cliente)');
     else toast('✓ '+nombre+' agregado como cliente');
   }
@@ -5187,6 +5253,7 @@ function mapSbCliente(sc, existingId){
   return {supabase_id:sc.id,n:sc.nombre,zone:sc.zona||'Capital',service:sc.servicio||'Mant. semanal',
     price:sc.precio||0,lat:sc.lat,lng:sc.lng,address:sc.direccion||sc.zona||'',phone:sc.telefono||'',
     notes:sc.notas||'',googleMapsUrl:sc.google_maps_url||'',status:sc.status||'activo',deleted:sc.deleted||false,
+    servicios:sc.servicios||[],pileta:sc.pileta||null,
     fechaCreacion:sc.created_at,av:sc.nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2),
     avc:AV[id%AV.length],last:'Sin registro',id,_synced:true};
 }
@@ -5246,7 +5313,14 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   // nube no lo sabe. Antes de reconstruir las tareas con lo que llega de
   // Supabase, guardamos ese valor para no perderlo en la reconstrucción.
   const preciosLocales = new Map();
-  schedule[dateKey].forEach(j=>{ if(j.supabase_id && j.price!=null) preciosLocales.set(j.supabase_id, j.price); });
+  const acidoLocal = new Map();
+  const duracionLocal = new Map();
+  schedule[dateKey].forEach(j=>{
+    if(!j.supabase_id) return;
+    if(j.price!=null) preciosLocales.set(j.supabase_id, j.price);
+    if(j.acidoLitros!=null) acidoLocal.set(j.supabase_id, j.acidoLitros);
+    if(j.duracionMin!=null) duracionLocal.set(j.supabase_id, j.duracionMin);
+  });
 
   const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
   const nuevas=[];
@@ -5262,7 +5336,9 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:(t.precio!=null?t.precio:preciosLocales.get(t.id))});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
+      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -5307,7 +5383,14 @@ async function syncTrabajosForDate(dateKey){
   // Mismo blindaje que en _mergeTrabajosIntoSchedule: no perder el valor
   // editado a mano (job.price) cuando se reconstruye desde Supabase.
   const preciosLocales = new Map();
-  schedule[dateKey].forEach(j=>{ if(j.supabase_id && j.price!=null) preciosLocales.set(j.supabase_id, j.price); });
+  const acidoLocal = new Map();
+  const duracionLocal = new Map();
+  schedule[dateKey].forEach(j=>{
+    if(!j.supabase_id) return;
+    if(j.price!=null) preciosLocales.set(j.supabase_id, j.price);
+    if(j.acidoLitros!=null) acidoLocal.set(j.supabase_id, j.acidoLitros);
+    if(j.duracionMin!=null) duracionLocal.set(j.supabase_id, j.duracionMin);
+  });
 
   let _diagAsignados=0, _diagSinCliente=0;
   const nuevas=[];
@@ -5324,7 +5407,9 @@ async function syncTrabajosForDate(dateKey){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:(t.precio!=null?t.precio:preciosLocales.get(t.id))});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
+      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
@@ -5424,7 +5509,8 @@ async function saveClienteToSupabase(cl){
   const doUpload = async () => {
     const p={nombre:cl.n,telefono:cl.phone||'',direccion:cl.address||'',zona:cl.zone,servicio:cl.service,
       precio:cl.price,lat:cl.lat||null,lng:cl.lng||null,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
-      status:cl.status,deleted:cl.deleted||false,updated_at:new Date().toISOString()};
+      status:cl.status,deleted:cl.deleted||false,servicios:cl.servicios||[],pileta:cl.pileta||null,
+      updated_at:new Date().toISOString()};
     if(cl.supabase_id){
       const {error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id);
       if(error) throw error;
@@ -5464,7 +5550,8 @@ async function saveTrabajoToSupabase(job,dateKey){
     if(!cl.supabase_id) throw new Error('No se pudo guardar el cliente en Supabase');
     const p={cliente_id:cl.supabase_id,fecha:dateKey,hora_inicio:job.time||'',hora_fin:job.endTime||'',
       notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,
-      precio:job.price??null,updated_at:new Date().toISOString()};
+      precio:job.price??null,acido_litros:job.acidoLitros??null,duracion_min:job.duracionMin??null,
+      updated_at:new Date().toISOString()};
     if(job.supabase_id){
       const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
       if(error) throw error;
@@ -6519,8 +6606,34 @@ function exportToGoogleCalendar(dateKey){
       </select>
     </div>
     <div class="mfield">
+      <div class="mlabel">Servicios que usa</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);background:var(--pdim);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer">
+          <input type="checkbox" id="nc-svc-limpieza" value="Limpieza total" style="margin:0">Limpieza total
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);background:var(--pdim);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer">
+          <input type="checkbox" id="nc-svc-mantenimiento" value="Mantenimiento" style="margin:0">Mantenimiento
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);background:var(--pdim);border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer">
+          <input type="checkbox" id="nc-svc-reparacion" value="Reparación" style="margin:0">Reparación
+        </label>
+      </div>
+    </div>
+    <div class="mfield">
       <div class="mlabel">Precio mensual ($)</div>
       <input class="minput" id="nc-precio" type="number" placeholder="Ej: 25000">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Pileta — medidas y material</div>
+      <div style="display:flex;gap:8px">
+        <input class="minput" id="nc-pil-largo" type="number" step="0.1" placeholder="Largo (m)">
+        <input class="minput" id="nc-pil-ancho" type="number" step="0.1" placeholder="Ancho (m)">
+        <input class="minput" id="nc-pil-prof" type="number" step="0.1" placeholder="Profund. (m)">
+      </div>
+      <select class="minput" id="nc-pil-material" style="margin-top:8px">
+        <option value="">Material...</option>
+        <option>Hormigón</option><option>Fibra</option><option>Liner</option><option>Otro</option>
+      </select>
     </div>
     <div class="mfield">
       <div class="mlabel">Ubicación (Google Maps)</div>
@@ -6613,6 +6726,10 @@ function exportToGoogleCalendar(dateKey){
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
       Editar valor
     </div>
+    <div class="asheet-item" onclick="asEditDetalleLimpieza()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Ácido usado / tiempo
+    </div>
     <div class="asheet-item" onclick="asNotes()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       Editar notas
@@ -6651,6 +6768,30 @@ function exportToGoogleCalendar(dateKey){
     <div class="mactions">
       <div class="bcancel" onclick="closeModal('resched')">Cancelar</div>
       <div class="bconfirm" onclick="saveResched()">Guardar ✓</div>
+    </div>
+  </div>
+</div>
+
+<!-- DETALLE DE LIMPIEZA MODAL -->
+<div class="modal-overlay" id="modal-detlimp" onclick="if(event.target===this)closeModal('detlimp')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div class="mtitle">Ácido usado / tiempo</div>
+    <div class="mfield">
+      <div class="mlabel">Cliente</div>
+      <input class="minput" id="dl-name" type="text" disabled>
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Ácido usado (litros)</div>
+      <input class="minput" id="dl-acido" type="number" step="0.1" placeholder="Ej: 2.5">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Tiempo que tardó (minutos)</div>
+      <input class="minput" id="dl-tiempo" type="number" placeholder="Ej: 45">
+    </div>
+    <div class="mactions">
+      <div class="bcancel" onclick="closeModal('detlimp')">Cancelar</div>
+      <div class="bconfirm" onclick="saveDetalleLimpieza()">Guardar ✓</div>
     </div>
   </div>
 </div>
