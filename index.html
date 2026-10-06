@@ -1311,6 +1311,9 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         <span class="pill p-green" onclick="filterByStatus('activo')">Activos</span>
         <span class="pill p-amber" onclick="filterByStatus('pendiente')">Pendientes</span>
         <span class="pill" id="pill-nuevos" onclick="toggleNewSinceFilter()" style="background:rgba(78,216,160,.1);color:var(--green);border:1px solid rgba(78,216,160,.25);cursor:pointer">🆕 Nuevos</span>
+        <span class="pill" id="pill-svc-limpieza" onclick="filterByServicio('Limpieza total')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🧽 Limpieza total</span>
+        <span class="pill" id="pill-svc-mantenimiento" onclick="filterByServicio('Mantenimiento')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🔧 Mantenimiento</span>
+        <span class="pill" id="pill-svc-reparacion" onclick="filterByServicio('Reparación')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🛠 Reparación</span>
         <span class="pill p-teal" onclick="showPage('mapa',null)">Ver mapa</span>
         <span class="pill" onclick="runDeduplication()" style="background:rgba(242,92,92,.1);color:var(--red);border:1px solid rgba(242,92,92,.2);cursor:pointer">🔍 Deduplicar</span>
       </div>
@@ -2251,12 +2254,29 @@ function applyNewSinceDate(){
   newSinceDate = document.getElementById('new-since-date').value || defaultNewSinceCutoff();
   filterClients();
 }
+// Filtro por "Servicios que usa" (Limpieza total / Mantenimiento /
+// Reparación) — un cliente puede tener varios marcados, el filtro
+// muestra a cualquiera que tenga el servicio elegido entre los suyos.
+let svcFilter = null;
+function filterByServicio(svc){
+  svcFilter = (svcFilter===svc) ? null : svc;
+  ['limpieza','mantenimiento','reparacion'].forEach(k=>{
+    const map = {limpieza:'Limpieza total',mantenimiento:'Mantenimiento',reparacion:'Reparación'};
+    const el = document.getElementById('pill-svc-'+k);
+    if(!el) return;
+    const active = svcFilter===map[k];
+    el.style.background = active ? 'var(--c6)' : 'var(--pdim)';
+    el.style.color = active ? 'var(--c1)' : 'var(--text2)';
+  });
+  filterClients();
+}
 function filterClients(){
   const q=document.getElementById('search-in').value.toLowerCase();
   let list=clients.filter(c=>!c.deleted);
   if(sfil==='sinGPS') list=list.filter(c=>!validCoord(c.lat,c.lng));
   else if(sfil) list=list.filter(c=>c.status===sfil);
   if(newSinceDate) list=list.filter(c=>c.fechaCreacion && c.fechaCreacion.slice(0,10)>=newSinceDate);
+  if(svcFilter) list=list.filter(c=>(c.servicios||[]).includes(svcFilter));
   if(q)list=list.filter(c=>c.n.toLowerCase().includes(q)||c.zone.toLowerCase().includes(q));
   // Orden alfabético: antes la lista seguía el orden interno de Supabase
   // (no alfabético), así que navegando la lista completa un cliente
