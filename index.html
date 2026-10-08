@@ -269,6 +269,12 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .p-teal{background:rgba(78,142,162,.14);color:var(--c5);border:1px solid rgba(78,142,162,.3)}
 .p-green{background:rgba(78,216,160,.12);color:var(--green);border:1px solid rgba(78,216,160,.25)}
 .p-amber{background:rgba(245,166,35,.12);color:var(--amber);border:1px solid rgba(245,166,35,.25)}
+.p-gray{background:rgba(150,150,150,.12);color:var(--text3);border:1px solid rgba(150,150,150,.25)}
+@media (hover:hover) and (pointer:fine){
+  .tabs,.nota-filter-bar,.fin-filter-bar,.sort-bar,[style*="overflow-x:auto"]{scrollbar-width:thin}
+  .tabs::-webkit-scrollbar,.nota-filter-bar::-webkit-scrollbar,.fin-filter-bar::-webkit-scrollbar,.sort-bar::-webkit-scrollbar,[style*="overflow-x:auto"]::-webkit-scrollbar{height:6px}
+  .tabs::-webkit-scrollbar-thumb,.nota-filter-bar::-webkit-scrollbar-thumb,.fin-filter-bar::-webkit-scrollbar-thumb,.sort-bar::-webkit-scrollbar-thumb,[style*="overflow-x:auto"]::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px}
+}
 
 /* ── METRICS ── */
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px}
@@ -1310,6 +1316,7 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         <span class="pill p-blue" onclick="filterByStatus(null)">Todos</span>
         <span class="pill p-green" onclick="filterByStatus('activo')">Activos</span>
         <span class="pill p-amber" onclick="filterByStatus('pendiente')">Pendientes</span>
+        <span class="pill p-gray" onclick="filterByStatus('inactivo')">Inactivos</span>
         <span class="pill" id="pill-nuevos" onclick="toggleNewSinceFilter()" style="background:rgba(78,216,160,.1);color:var(--green);border:1px solid rgba(78,216,160,.25);cursor:pointer">🆕 Nuevos</span>
         <span class="pill" id="pill-svc-limpieza" onclick="filterByServicio('Limpieza total')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🧽 Limpieza total</span>
         <span class="pill" id="pill-svc-mantenimiento" onclick="filterByServicio('Mantenimiento')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🔧 Mantenimiento</span>
@@ -1883,6 +1890,21 @@ document.addEventListener('DOMContentLoaded',()=>{
     mapSearchTimeout=setTimeout(mapSearchExec,300);
   });
 });
+// ── Navegación con mouse en filas de etiquetas/pestañas con scroll horizontal ──
+// Estas filas (.tabs, .nota-filter-bar, .fin-filter-bar, .sort-bar, filtros de
+// clientes, etc.) están pensadas para hacerles swipe con el dedo en celular.
+// En PC, sin touch, quedaban "trabadas": no había forma de llegar a las
+// etiquetas que no entraban en el ancho visible. Esto convierte el scroll
+// vertical del mouse (o el trackpad) en scroll horizontal cuando el cursor
+// está sobre una de estas filas, así se puede navegar con la rueda normal.
+document.addEventListener('wheel',(e)=>{
+  const row = e.target.closest('.tabs,.nota-filter-bar,.fin-filter-bar,.sort-bar,[style*="overflow-x:auto"]');
+  if(!row) return;
+  if(row.scrollWidth<=row.clientWidth) return; // no hay nada para scrollear
+  if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return; // ya es scroll horizontal (trackpad), dejarlo pasar
+  e.preventDefault();
+  row.scrollLeft += e.deltaY;
+},{passive:false});
 function mapSearchExec(){
   const q=(document.getElementById('map-search-in').value||'').toLowerCase().trim();
   const res=document.getElementById('map-search-results');
@@ -2217,11 +2239,39 @@ function renderClients(list){
         <div class="cr-ico" onclick="editClient('${c.supabase_id||c.id}')" title="Editar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </div>
+        <div class="cr-ico" onclick="toggleClientActive('${c.supabase_id||c.id}')" title="${c.status==='inactivo'?'Reactivar':'Marcar como inactivo'}">
+          ${c.status==='inactivo'
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-5.5 0-9-7-9-7a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c5.5 0 9 7 9 7a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><path d="M1 1l22 22"/></svg>'}
+        </div>
         <div class="cr-ico" onclick="confirmDeleteClient('${c.supabase_id||c.id}')" title="Eliminar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6"/></svg>
         </div>
       </div>
     </div>`).join('');
+}
+// Marca/desmarca un cliente como inactivo (no lo borra, solo lo saca de "Activos"
+// y lo manda al filtro "Inactivos" — para clientes que no renovaron pero
+// podrían volver más adelante).
+function toggleClientActive(clientId){
+  const id = resolveClientId(clientId);
+  const c = getClientById(id);
+  if(!c){ toast('⚠ Este cliente ya no existe'); filterClients(); return; }
+  const wasInactive = c.status === 'inactivo';
+  if(wasInactive){
+    c.status = 'activo';
+    toast('✓ '+c.n+' reactivado');
+  } else {
+    c._prevStatus = c.status; // por si en el futuro se quiere restaurar el estado previo exacto
+    c.status = 'inactivo';
+    toast('○ '+c.n+' marcado como inactivo');
+  }
+  filterClients();
+  if(mapInit) renderMarkers(clients.filter(cl=>!cl.deleted));
+  dbSaveAndRefresh();
+  if(c.supabase_id){
+    saveClienteToSupabase(c).catch(()=>queueSync('save_cliente',{clientId:id}));
+  }
 }
 let newSinceDate = null; // 'YYYY-MM-DD' o null — filtro "clientes nuevos desde esta fecha"
 function defaultNewSinceCutoff(){
