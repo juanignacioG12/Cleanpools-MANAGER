@@ -1159,6 +1159,33 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 @media (prefers-reduced-motion: reduce){
   #fab-btn, #sync-pending-badge{ animation:none !important; }
 }
+
+/* ════════════════════════════════════════════
+   CONTRASTE — textos más legibles en ambos temas
+   ════════════════════════════════════════════ */
+/* Oscuro: textos secundarios más claros */
+:root{ --text3:#93B8D1; --text2:#D2E6F3; }
+/* Claro: acentos y textos oscuros sobre fondo claro. --c1 pasa a blanco
+   (se usa como color de texto sobre botones/selecciones azules). */
+html[data-theme="light"]{
+  --c1:#FFFFFF;
+  --c3:#2F628C; --c4:#2A6C98; --c5:#2A6F8A; --c6:#1B67A0; --c7:#0A4174;
+  --text:#06223A; --text2:#1F4A6B; --text3:#4A6B85;
+  --green:#0B7F57; --amber:#A85F00; --red:#C92D2D; --teal:#0C857B;
+  --border:rgba(10,65,116,0.18); --border2:rgba(10,65,116,0.34);
+}
+html[data-theme="light"] .mv.green,html[data-theme="light"] .fin-kpi-val{text-shadow:none}
+html[data-theme="light"] .jcard-notes{background:rgba(27,103,160,.08)}
+html[data-theme="light"] .logo-sub{color:var(--c6)}
+/* Letras chicas: un punto más grandes */
+.slabel,.ml,.ms,.mstat-l,.cz,.fd,.mlabel,.cal-dow,.jcard-svc,.jcard-addr,.jcard-notes,
+.hist-svc,.hist-notes,.hist-stat-lbl,.grupo-members,.nota-date,.nota-btn,
+.fin-kpi-label,.fin-kpi-sub,.rs-detail,.rs-dist,.rs-sum-lbl,.wi-det,.wi-time,.rkm,.pill,.logo-sub{font-size:11px}
+.bni{font-size:10px}
+[style*="font-size:10px"]{font-size:11.5px!important}
+[style*="font-size:9px"]{font-size:10.5px!important}
+[style*="font-size:11px"]{font-size:12px!important}
+@media (min-width:1000px){ .bni{font-size:14px} }
 </style>
 </head>
 <body>
@@ -2274,7 +2301,7 @@ function showClientHistory(clientId){
         <div class="hist-info">
           <div class="hist-date">${dateStr} ${v.time?'· '+v.time:''}</div>
           <div class="hist-svc">${cl.service} · <span style="color:${v.status==='done'?'var(--green)':'var(--text3)'}">${stLabel}</span></div>
-          ${(v.acidoLitros!=null||v.duracionMin!=null||v.dificultad)?'<div class="hist-notes">🧪 '+[v.acidoLitros!=null?v.acidoLitros+' L':'',v.duracionMin!=null?'⏱ '+v.duracionMin+' min':'',v.dificultad?(DIF_ICON[v.dificultad]||'')+' '+(DIF_LABEL[v.dificultad]||v.dificultad):''].filter(Boolean).join(' · ')+'</div>':''}
+          ${(v.acidoLitros!=null||v.duracionMin!=null||v.dificultad)?'<div class="hist-notes">🧪 '+[v.acidoLitros!=null?v.acidoLitros+' L':'',v.duracionMin!=null?'⏱ '+fmtHs(v.duracionMin):'',v.dificultad?(DIF_ICON[v.dificultad]||'')+' '+(DIF_LABEL[v.dificultad]||v.dificultad):''].filter(Boolean).join(' · ')+'</div>':''}
           ${v.notes?'<div class="hist-notes">📝 '+v.notes+'</div>':''}
         </div>
         <div style="font-size:11px;font-weight:800;color:var(--c6);flex-shrink:0">
@@ -3039,6 +3066,12 @@ function openActions(dateKey,idx){
   document.getElementById('as-remove-future').style.display = e.recurrenceId ? 'flex' : 'none';
   openModal('actions');
 }
+// El tiempo se carga y muestra en horas (1 h, 2,5 hs); internamente se
+// guarda en minutos (duracionMin) para no romper datos ni la columna de Supabase.
+function fmtHs(min){
+  const h=Math.round(min/60*100)/100;
+  return (h===1?'1':h.toLocaleString('es-AR'))+(h===1?' h':' hs');
+}
 const DIF_LABEL={facil:'Fácil',medio:'Medio',dificil:'Difícil'};
 const DIF_ICON={facil:'🟢',medio:'🟡',dificil:'🔴'};
 function setDificultad(v){
@@ -3052,7 +3085,7 @@ function asEditDetalleLimpieza(){
   const c=getClientById(e.clientId);
   document.getElementById('dl-name').value=c.n;
   document.getElementById('dl-acido').value=e.acidoLitros??'';
-  document.getElementById('dl-tiempo').value=e.duracionMin??'';
+  document.getElementById('dl-tiempo').value=e.duracionMin!=null?Math.round(e.duracionMin/60*100)/100:'';
   setDificultad(e.dificultad||'');
   closeModal('actions');
   openModal('detlimp');
@@ -3064,7 +3097,8 @@ function saveDetalleLimpieza(){
   const acido = document.getElementById('dl-acido').value;
   const tiempo = document.getElementById('dl-tiempo').value;
   e.acidoLitros = acido!=='' ? parseFloat(acido.replace(',','.')) : null;
-  e.duracionMin = tiempo!=='' ? parseInt(tiempo) : null;
+  const hs = tiempo!=='' ? parseFloat(String(tiempo).replace(',','.')) : NaN;
+  e.duracionMin = isNaN(hs) ? null : Math.round(hs*60);
   e.dificultad = document.getElementById('dl-dificultad').value || null;
   dbSave();
   closeModal('detlimp');
@@ -3824,12 +3858,12 @@ function renderReporteLimpieza(from,to){
   rows.forEach(r=>{ if(dif[r.e.dificultad]!==undefined) dif[r.e.dificultad]++; });
   const sinDif=rows.length-dif.facil-dif.medio-dif.dificil;
   const n1=v=>(Math.round(v*10)/10).toLocaleString('es-AR');
-  const fmtMin=m=>m>=60?Math.floor(m/60)+' h '+(Math.round(m%60))+' min':Math.round(m)+' min';
+  const fmtMin=fmtHs;
   const kpi=(l,v,sub)=>`<div class="fin-kpi"><div class="fin-kpi-label">${l}</div><div class="fin-kpi-val" style="color:var(--c6)">${v}</div><div class="fin-kpi-sub">${sub}</div></div>`;
   const dc=(c,n,l)=>`<div style="flex:1;text-align:center;padding:8px 4px;border-radius:10px;background:var(--pdim);font-size:12px;font-weight:700;color:var(--c7)">${c} ${l}<div style="font-size:18px">${n}</div></div>`;
   const list=[...rows].reverse().map(r=>{
     const e=r.e;
-    const partes=[e.acidoLitros!=null?'🧪 '+n1(e.acidoLitros)+' L':'',e.duracionMin!=null?'⏱ '+e.duracionMin+' min':'',e.dificultad?DIF_ICON[e.dificultad]+' '+DIF_LABEL[e.dificultad]:''].filter(Boolean);
+    const partes=[e.acidoLitros!=null?'🧪 '+n1(e.acidoLitros)+' L':'',e.duracionMin!=null?'⏱ '+fmtHs(e.duracionMin):'',e.dificultad?DIF_ICON[e.dificultad]+' '+DIF_LABEL[e.dificultad]:''].filter(Boolean);
     return `<div class="fr" style="cursor:pointer" onclick="reporteEditarLimpieza('${r.k}',${r.idx})" title="Tocar para editar">
       <div><div class="fc">${r.cl.n}</div><div class="fd">${r.k}</div></div>
       <div class="fd" style="text-align:right;color:var(--c6)">${partes.length?partes.join(' · '):'<span style="color:var(--text3)">sin datos · tocar para cargar</span>'}</div></div>`;
@@ -7033,8 +7067,8 @@ function exportToGoogleCalendar(dateKey){
       <input class="minput" id="dl-acido" type="number" step="0.1" placeholder="Ej: 2.5">
     </div>
     <div class="mfield">
-      <div class="mlabel">Tiempo que tardó (minutos)</div>
-      <input class="minput" id="dl-tiempo" type="number" placeholder="Ej: 45">
+      <div class="mlabel">Tiempo que tardó (horas)</div>
+      <input class="minput" id="dl-tiempo" type="number" step="0.25" min="0" inputmode="decimal" placeholder="Ej: 1 o 2,5">
     </div>
     <div class="mfield">
       <div class="mlabel">Dificultad</div>
