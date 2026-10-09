@@ -63,7 +63,7 @@
 if('serviceWorker' in navigator){
   // ⚠ Subir este número en cada deploy con cambios importantes.
   // Fuerza a que TODOS los clientes descarten la caché vieja.
-  const SW_VERSION = 'cp-v8';
+  const SW_VERSION = 'cp-v9';
   const SW_CODE = `
 const CACHE = '${SW_VERSION}';
 const SHELL = ['./'];
@@ -1592,7 +1592,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     </div>
 
     <!-- AGENDA / CALENDARIO (página standalone, accesible desde dashboard) -->
-    <div id="pg-agenda" class="page" style="display:none">
+    <div id="pg-agenda" class="page">
       <div class="cal-hdr">
         <div class="cal-nav" onclick="calShift(-1)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><path d="M15 18l-6-6 6-6"/></svg>
@@ -1871,9 +1871,9 @@ function findOrCreateClient(name,zone,svc,price,addr,lat,lng){
   const av=name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
   const id=nextClientId++;
   const z=zone||'Capital';
-  let coords;
-  if(lat!=null && lng!=null) coords=[lat,lng];
-  else coords=jitterCoord(z,id);
+  // Sin coordenadas reales → null (antes se inventaba una posición "aproximada"
+  // que no se distinguía de una real y mandaba a navegar a un lugar falso).
+  const coords = (lat!=null && lng!=null && validCoord(lat,lng)) ? [lat,lng] : [null,null];
   clients.push({n:name,zone:z,service:svc||'Mant. semanal',price:price||25000,
     status:'activo',av,avc:AV[id%AV.length],last:'hoy',lat:coords[0],lng:coords[1],id,
     phone:'',address:addr||z||'',notes:'',deleted:false,googleMapsUrl:'',fechaCreacion:new Date().toISOString()});
@@ -3423,6 +3423,9 @@ function confirmYes(){
 function openModal(id){
   const el=document.getElementById('modal-'+id);
   if(!el)return;
+  // "+ Nueva" desde el botón: si quedó una edición a medias, limpiar el formulario
+  if(id==='nota' && !_notaOpeningForEdit){ resetNotaForm(); }
+  _notaOpeningForEdit=false;
   el.classList.add('open');
   document.body.style.overflow='hidden';
 }
@@ -4074,6 +4077,13 @@ function renderNotas(){
     </div>`).join('');
 }
 
+let _notaOpeningForEdit=false;
+function resetNotaForm(){
+  const c=document.getElementById('nt-content'); if(c) c.value='';
+  const e=document.getElementById('nt-edit-id'); if(e) e.value='';
+  const t=document.getElementById('nota-modal-title'); if(t) t.textContent='Nueva nota';
+  if(typeof selectNotaTag==='function') selectNotaTag('idea');
+}
 function saveNota(){
   const content = document.getElementById('nt-content').value.trim();
   if(!content){ toast('⚠ Escribí el contenido de la nota'); return; }
@@ -4090,8 +4100,7 @@ function saveNota(){
   closeModal('nota');
   renderNotas();
   document.getElementById('nt-content').value='';
-  document.getElementById('nt-edit-id').value='';
-  selectNotaTag('idea');
+  resetNotaForm();
   toast('✓ Nota guardada');
 }
 
@@ -4102,6 +4111,7 @@ function editNota(id){
   document.getElementById('nt-edit-id').value = id;
   document.getElementById('nota-modal-title').textContent = 'Editar nota';
   selectNotaTag(n.tag);
+  _notaOpeningForEdit=true;
   openModal('nota');
 }
 
@@ -4564,11 +4574,11 @@ async function saveCliente(){
   } else {
     const av = nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const id=nextClientId++;
-    const coords = hasCoords ? [latVal,lngVal] : jitterCoord(zona,id);
+    const coords = hasCoords ? [latVal,lngVal] : [null,null];
     clients.push({n:nombre,zone:zona,service:svc,price:precio,status:'activo',av,avc:AV[id%AV.length],
       last:'hoy',lat:coords[0],lng:coords[1],id,phone:tel,address:dir||zona,notes:notas,deleted:false,
       googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString(),servicios,pileta});
-    if(!hasCoords) toast('✓ '+nombre+' agregado (ubicación aproximada por zona — podés ajustarla editando el cliente)');
+    if(!hasCoords) toast('✓ '+nombre+' agregado sin ubicación GPS — editá el cliente para agregarla');
     else toast('✓ '+nombre+' agregado como cliente');
   }
   // marcar como editado para que dbSave lo persista
@@ -5091,19 +5101,23 @@ function renderDashboardPaint(){
     const [y,m,d] = k.split('-').map(Number);
     const kd = new Date(y,m-1,d);
     const jobs = (schedule[k]||[]).filter(e=>!getClientById(e.clientId)?.deleted);
-    const income = jobs.reduce((a,e)=>(e.price??getClientById(e.clientId)?.price??0)+a, 0);
+    // Solo trabajos completados cuentan como ingreso (igual que en Finanzas)
+    const income = jobs.filter(e=>e.status==='done').reduce((a,e)=>(e.price??getClientById(e.clientId)?.price??0)+a, 0);
     if(kd>=weekStart && kd<=weekEnd){  weekIncome+=income; weekJobs+=jobs.length; }
     if(kd>=monthStart && kd<=monthEnd){ monthIncome+=income; monthJobs+=jobs.length; }
   });
 
   // También sumar transacciones de ingresos del mes
+  const weekIncomeFromTrans = transactions
+    .filter(t=>t.tipo==='ingreso' && t.fecha>=dkey(weekStart) && t.fecha<=dkey(weekEnd))
+    .reduce((a,t)=>a+t.monto,0);
   const monthIncomeFromTrans = transactions
     .filter(t=>t.tipo==='ingreso' && t.fecha>=dkey(monthStart) && t.fecha<=dkey(monthEnd))
     .reduce((a,t)=>a+t.monto,0);
 
   document.getElementById('m-total-clients').textContent = activeCount;
   document.getElementById('m-active-clients').textContent = activosCount+' activos';
-  document.getElementById('m-week-income').textContent = '$'+(Math.round((weekIncome+monthIncomeFromTrans*0.25)/1000))+'K';
+  document.getElementById('m-week-income').textContent = '$'+(Math.round((weekIncome+weekIncomeFromTrans)/1000))+'K';
   document.getElementById('m-week-jobs').textContent   = weekJobs+' trabajos';
   document.getElementById('m-month-income').textContent= '$'+(Math.round((monthIncome+monthIncomeFromTrans)/1000))+'K';
   document.getElementById('m-month-jobs').textContent  = monthJobs+' trabajos';
