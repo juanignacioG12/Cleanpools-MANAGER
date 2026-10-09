@@ -265,6 +265,7 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 
 /* ── PILLS ── */
 .pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;cursor:pointer;white-space:nowrap}
+.pill-count{font-weight:600;opacity:.7}
 .p-blue{background:rgba(123,189,232,.14);color:var(--c6);border:1px solid rgba(123,189,232,.3)}
 .p-teal{background:rgba(78,142,162,.14);color:var(--c5);border:1px solid rgba(78,142,162,.3)}
 .p-green{background:rgba(78,216,160,.12);color:var(--green);border:1px solid rgba(78,216,160,.25)}
@@ -1313,14 +1314,14 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         </div>
       </div>
       <div style="display:flex;gap:6px;padding:0 16px 10px;overflow-x:auto;scrollbar-width:none">
-        <span class="pill p-blue" onclick="filterByStatus(null)">Todos</span>
-        <span class="pill p-green" onclick="filterByStatus('activo')">Activos</span>
-        <span class="pill p-amber" onclick="filterByStatus('pendiente')">Pendientes</span>
-        <span class="pill p-gray" onclick="filterByStatus('inactivo')">Inactivos</span>
-        <span class="pill" id="pill-nuevos" onclick="toggleNewSinceFilter()" style="background:rgba(78,216,160,.1);color:var(--green);border:1px solid rgba(78,216,160,.25);cursor:pointer">🆕 Nuevos</span>
-        <span class="pill" id="pill-svc-limpieza" onclick="filterByServicio('Limpieza total')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🧽 Limpieza total</span>
-        <span class="pill" id="pill-svc-mantenimiento" onclick="filterByServicio('Mantenimiento')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🔧 Mantenimiento</span>
-        <span class="pill" id="pill-svc-reparacion" onclick="filterByServicio('Reparación')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🛠 Reparación</span>
+        <span class="pill p-blue" id="pill-status-todos" onclick="filterByStatus(null)">Todos <span class="pill-count"></span></span>
+        <span class="pill p-green" id="pill-status-activo" onclick="filterByStatus('activo')">Activos <span class="pill-count"></span></span>
+        <span class="pill p-amber" id="pill-status-pendiente" onclick="filterByStatus('pendiente')">Pendientes <span class="pill-count"></span></span>
+        <span class="pill p-gray" id="pill-status-inactivo" onclick="filterByStatus('inactivo')">Inactivos <span class="pill-count"></span></span>
+        <span class="pill" id="pill-nuevos" onclick="toggleNewSinceFilter()" style="background:rgba(78,216,160,.1);color:var(--green);border:1px solid rgba(78,216,160,.25);cursor:pointer">🆕 Nuevos <span class="pill-count"></span></span>
+        <span class="pill" id="pill-svc-limpieza" onclick="filterByServicio('Limpieza total')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🧽 Limpieza total <span class="pill-count"></span></span>
+        <span class="pill" id="pill-svc-mantenimiento" onclick="filterByServicio('Mantenimiento')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🔧 Mantenimiento <span class="pill-count"></span></span>
+        <span class="pill" id="pill-svc-reparacion" onclick="filterByServicio('Reparación')" style="background:var(--pdim);color:var(--text2);border:1px solid var(--border);cursor:pointer">🛠 Reparación <span class="pill-count"></span></span>
         <span class="pill p-teal" onclick="showPage('mapa',null)">Ver mapa</span>
         <span class="pill" onclick="runDeduplication()" style="background:rgba(242,92,92,.1);color:var(--red);border:1px solid rgba(242,92,92,.2);cursor:pointer">🔍 Deduplicar</span>
       </div>
@@ -2334,8 +2335,36 @@ function filterClients(){
   // sí funcionara bien (la búsqueda no depende del orden).
   list = [...list].sort((a,b)=>a.n.localeCompare(b.n,'es',{sensitivity:'base'}));
   renderClients(list);
+  updateFilterCounts();
 }
 function filterByStatus(s){sfil=s;filterClients();}
+// Actualiza el número que aparece en cada etiqueta de filtro (Todos,
+// Activos, Pendientes, Inactivos, Nuevos, y los 3 servicios), sobre el
+// total de clientes vivos (no eliminados) — independiente del filtro que
+// esté aplicado en ese momento, para poder ver cuántos hay en cada
+// categoría sin tener que ir tocando una por una.
+function updateFilterCounts(){
+  const base = clients.filter(c=>!c.deleted);
+  const counts = {
+    todos: base.length,
+    activo: base.filter(c=>c.status==='activo').length,
+    pendiente: base.filter(c=>c.status==='pendiente').length,
+    inactivo: base.filter(c=>c.status==='inactivo').length,
+    nuevos: base.filter(c=>c.fechaCreacion && c.fechaCreacion.slice(0,10)>=(newSinceDate||defaultNewSinceCutoff())).length,
+    limpieza: base.filter(c=>(c.servicios||[]).includes('Limpieza total')).length,
+    mantenimiento: base.filter(c=>(c.servicios||[]).includes('Mantenimiento')).length,
+    reparacion: base.filter(c=>(c.servicios||[]).includes('Reparación')).length,
+  };
+  const set=(id,n)=>{ const el=document.querySelector('#'+id+' .pill-count'); if(el) el.textContent = n>0?'('+n+')':''; };
+  set('pill-status-todos',counts.todos);
+  set('pill-status-activo',counts.activo);
+  set('pill-status-pendiente',counts.pendiente);
+  set('pill-status-inactivo',counts.inactivo);
+  set('pill-nuevos',counts.nuevos);
+  set('pill-svc-limpieza',counts.limpieza);
+  set('pill-svc-mantenimiento',counts.mantenimiento);
+  set('pill-svc-reparacion',counts.reparacion);
+}
 // Corrección 4: ir directo a la lista de clientes SIN coordenadas GPS,
 // en vez de abrir la lista completa de todos los clientes.
 function showClientsSinGPS(){
@@ -3222,6 +3251,7 @@ function confirmYes(){
       schedule[k]=schedule[k].filter(e=>e.clientId!==id);
     });
     renderClients(clients.filter(c=>!c.deleted&&(!sfil||c.status===sfil)));
+    updateFilterCounts();
     renderToday();
     renderCalendar();
     if(mapInit) renderMarkers(clients.filter(c=>!c.deleted));
