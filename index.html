@@ -63,7 +63,7 @@
 if('serviceWorker' in navigator){
   // ⚠ Subir este número en cada deploy con cambios importantes.
   // Fuerza a que TODOS los clientes descarten la caché vieja.
-  const SW_VERSION = 'cp-v6';
+  const SW_VERSION = 'cp-v7';
   const SW_CODE = `
 const CACHE = '${SW_VERSION}';
 const SHELL = ['./'];
@@ -430,6 +430,9 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .mhandle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 16px}
 .mtitle{font-size:16px;font-weight:800;color:var(--text);margin-bottom:16px}
 .mfield{margin-bottom:12px}
+.dif-pills{display:flex;gap:8px}
+.dif-pill{flex:1;text-align:center;padding:10px 6px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card);color:var(--c6);font-size:13px;font-weight:700;cursor:pointer}
+.dif-pill.on{border-color:var(--c6);background:rgba(123,189,232,.22);color:var(--text);box-shadow:0 0 0 1px var(--c6)}
 .mlabel{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text3);text-transform:uppercase;margin-bottom:5px}
 .minput{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none}
 .minput:focus{border-color:var(--c6)}
@@ -935,75 +938,117 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 .opt-badge{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(78,216,160,.15);color:var(--green);margin-left:6px}
 
 /* ════════════════════════════════════════════
-   MODO ESCRITORIO / PC (solo estilos — no toca
-   estructura HTML ni lógica de datos)
+   MODO ESCRITORIO / PC — layout propio de PC:
+   menú lateral fijo, contenido a todo el ancho con
+   paneles en columnas y ventanas (modales) centradas.
+   En pantallas menores a 1000px se mantiene el diseño móvil.
    ════════════════════════════════════════════ */
-@media (min-width: 820px){
-  body{
-    background: var(--bg2);
-    display:flex; align-items:center; justify-content:center;
-  }
-  #app{
-    /* Ancho moderado: suficiente para verse como "ventana de escritorio"
-       sin estirar elementos pensados para mobile (como el calendario, que
-       tiene celdas cuadradas de 7 columnas y se ve enorme si el
-       contenedor es demasiado ancho). */
-    max-width: 560px;
-    width: 92vw;
-    height: 92vh; height: 92dvh;
-    margin: 0 auto;
-    border-radius: 18px;
-    box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px var(--border);
-    overflow: hidden;
-  }
-  /* Splash y login también centrados como ventana, no pantalla completa.
-     inset:auto resetea los 4 bordes que fija la regla original (inset:0)
-     antes de centrar con left/top/transform — si no, quedaba una caja
-     deformada por el conflicto entre ambas reglas. */
-  #splash, #login-screen{
-    inset:auto;
-    max-width: 460px; width: 92vw;
-    height: 640px; max-height: 92vh;
-    margin: 0 auto;
-    border-radius: 18px;
-    box-shadow: 0 24px 70px rgba(0,0,0,.45);
-    left:50%; top:50%; transform:translate(-50%,-50%);
-  }
-  /* Barra de navegación: íconos y texto lado a lado, más cómoda para mouse */
-  .bnav{ padding-bottom:10px; }
-  .bni{
-    flex-direction:row; gap:7px;
-    font-size:12px; padding:12px 8px;
-  }
-  .bni svg{ width:18px; height:18px; }
-  .bni:hover{ color:var(--c6); cursor:pointer; }
+.dgrid{display:block}
 
-  /* Blindaje extra: el calendario mantiene su proporción normal aunque
-     el contenedor sea más ancho — sin esto, las celdas cuadradas de 7
-     columnas se agrandan muchísimo y empujan la lista de tareas del día
-     fuera de la vista. */
-  .cal-grid{ max-width:420px; margin:0 auto; }
-
-  /* Modales: ancho fijo cómodo en vez de ocupar toda la pantalla */
-  .modal-box{ max-width:440px; margin:0 auto; }
-
-  /* Botones y filas clicables: cursor de mano para mouse */
-  .cr-ico, .bconfirm, .fab-opt, .pill, .cal-day, .jcard, .nota-card,
-  .section-tab-btn, .emp-btn, [onclick]{ cursor:pointer; }
-
-  /* FAB (botón +) y aviso emergente: en mobile usan position:fixed
-     (relativo a toda la pantalla), lo cual está bien porque #app ocupa
-     toda la pantalla ahí. En PC, #app es una ventana centrada más chica
-     que la pantalla — así que estos dos se anclan a esa ventana en vez
-     de flotar sueltos en el fondo. */
-  #fab-btn{ position:absolute; right:24px; bottom:96px; }
-  #fab-menu{ position:absolute; right:24px; bottom:calc(96px + 56px + 16px); }
-  #toast{ position:absolute; top:16px; }
+/* Tablet / ventana angosta: sin "marco de teléfono", usa todo el ancho */
+@media (min-width:600px) and (max-width:999px){
+  #app{max-width:none;width:100%}
+  .modal-box{max-width:520px}
 }
 
-/* Pantallas muy anchas: un poco más de aire, sin exagerar */
-@media (min-width: 1300px){
-  #app{ max-width: 640px; }
+@media (min-width:1000px){
+  html,body{background:var(--bg)}
+  #app{
+    display:grid;
+    grid-template-columns:236px minmax(0,1fr);
+    grid-template-rows:62px minmax(0,1fr);
+    grid-template-areas:"top top" "side main";
+    max-width:none;width:100%;height:100vh;height:100dvh;margin:0;
+  }
+  .topbar{grid-area:top;padding:0 28px;border-bottom:1px solid var(--border)}
+  .logo-icon{width:40px;height:40px}
+  .pages{grid-area:main;min-width:0;min-height:0}
+
+  /* Barra inferior → menú lateral */
+  .bnav{
+    grid-area:side;
+    flex-direction:column;align-items:stretch;justify-content:flex-start;
+    gap:4px;padding:18px 12px;
+    border-top:0;border-right:1px solid var(--border);
+    overflow-x:hidden;overflow-y:auto;
+  }
+  .bnav::before{
+    content:'MENÚ';font-size:10px;font-weight:800;letter-spacing:1.6px;
+    color:var(--text3);padding:0 14px 8px;
+  }
+  .bni{
+    flex:0 0 auto;min-width:0;
+    flex-direction:row;justify-content:flex-start;gap:12px;
+    padding:12px 14px;border-radius:10px;
+    font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;
+    transition:background .15s,color .15s;
+  }
+  .bni svg{width:20px;height:20px}
+  .bni:hover{background:var(--pdim);color:var(--c6)}
+  .bni.on{background:var(--pdim);color:var(--c6);box-shadow:inset 3px 0 0 var(--c6)}
+
+  /* Páginas: área de trabajo ancha con márgenes propios */
+  .page{padding-bottom:48px}
+  .page:not(#pg-mapa){padding-top:22px;padding-left:max(32px,calc((100% - 1360px)/2));padding-right:max(32px,calc((100% - 1360px)/2))}
+  .page .slabel{padding-left:0;padding-right:0;font-size:11px}
+  .page .card,.page .jcard,.page .nota-card,.page #cal-toggle-btn{margin-left:0;margin-right:0}
+  .metrics,.fin-kpis,.route-datebar,.fin-filter-bar,.nota-filter-bar{padding-left:0;padding-right:0}
+  #pg-clientes > div[style*="padding:0 16px"]{padding-left:0!important;padding-right:0!important}
+  #fin-period-lbl{padding-left:0!important}
+  .page > div[style*="padding:8px 16px"]{padding-left:0!important;padding-right:0!important}
+  .fin-reset-btn{margin-left:0!important;margin-right:0!important}
+  #fin-limpieza .fin-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  #fin-limpieza .fin-kpi-val{font-size:20px}
+  .metrics,.fin-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+  .metric{padding:18px}
+  .mv{font-size:28px}
+  .fin-kpi-val{font-size:26px}
+
+  /* Paneles en columnas (se acomodan solos según el ancho) */
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:0 24px;align-items:start}
+  .dgrid > .dsec{min-width:0}
+  #cal-toggle-btn{display:none}
+  #cal-inline{max-height:none!important;overflow:visible}
+  .cal-grid{max-width:520px;padding-left:0;padding-right:0}
+  .cal-hdr,.agenda-date{padding-left:0!important;padding-right:0!important}
+
+  /* Listas en grilla de tarjetas */
+  #client-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr))}
+  #client-list > :not(.cr){grid-column:1/-1}
+  #client-list .cr:hover{background:var(--pdim)}
+  #notas-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
+  #notas-list .nota-card{margin:0}
+  #notas-list > :not(.nota-card){grid-column:1/-1}
+  #route-list,#agenda-list,#dash-agenda-list,#empleado-jobs-list{max-width:900px}
+  .jcard{margin-left:0;margin-right:0}
+
+  /* Mapa: ocupa toda el área de trabajo */
+  #pg-mapa{padding:0}
+
+  /* Ventanas (modales) centradas en vez de hoja desde abajo */
+  .modal-overlay{align-items:center}
+  .modal-box{
+    max-width:540px;max-height:88vh;
+    border-radius:18px;padding:26px 30px;
+    transform:translateY(14px) scale(.97);opacity:0;
+    transition:transform .22s cubic-bezier(.33,1,.68,1),opacity .2s;
+    box-shadow:0 24px 70px rgba(0,0,0,.45);
+  }
+  .modal-overlay.open .modal-box{transform:none;opacity:1}
+  .mhandle{display:none}
+
+  /* FAB y avisos */
+  #fab-btn{bottom:32px;right:36px}
+  #fab-menu{bottom:calc(32px + 56px + 16px);right:36px}
+  #toast{top:76px}
+
+  /* Cursor / hover de escritorio */
+  .cr-ico,.bconfirm,.bcancel,.fab-opt,.pill,.cal-day,.jcard,.nota-card,
+  .section-tab-btn,.emp-btn,.fin-fpill,.dif-pill,[onclick]{cursor:pointer}
+  .jcard:hover,.nota-card:hover,.metric:hover{border-color:var(--border2)}
+
+  /* Pantalla de acceso: tarjeta centrada, no estirada */
+  #login-screen > *{max-width:420px;margin-left:auto;margin-right:auto;width:100%}
 }
 
 /* ════════════════════════════════════════════
@@ -1228,9 +1273,13 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         </div>
       </div>
 
+      <div class="dgrid">
+      <div class="dsec">
       <div class="slabel">Agenda de hoy</div>
       <div class="card" style="padding:0;overflow:hidden"><div id="today-list"></div></div>
+      </div>
 
+      <div class="dsec">
       <div class="slabel">Ingresos Clean Pools</div>
       <div class="card"><div id="zona-chart"></div></div>
 
@@ -1253,6 +1302,8 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
         <div class="agenda-date" id="dash-agenda-date" style="padding:8px 16px 4px">—</div>
         <div id="dash-agenda-list"></div>
       </div>
+      </div>
+      </div><!-- /dgrid -->
 
       <div class="slabel">Oportunidades</div>
       <div class="card" id="oportunidades-card" style="padding:0 16px">
@@ -1380,7 +1431,8 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
 
       <!-- PANEL DE RECORRIDO GENERADO -->
       <div id="recorrido-warn" style="display:none"></div>
-      <div id="recorrido-panel" style="display:none">
+      <div class="dgrid">
+      <div id="recorrido-panel" class="dsec" style="display:none">
         <div class="slabel" style="padding-top:4px">Recorrido generado</div>
         <div class="recorrido-card">
           <div id="recorrido-stops"></div>
@@ -1399,8 +1451,11 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       </div>
 
       <!-- LISTA DE VISITAS DEL DÍA -->
+      <div class="dsec">
       <div class="slabel" style="padding-top:4px">Visitas del día</div>
       <div id="route-list"></div>
+      </div>
+      </div><!-- /dgrid -->
 
       <!-- BOTONES -->
       <div style="display:none" id="route-actions">
@@ -1458,8 +1513,18 @@ html[data-theme="light"] .logo-real path[fill="#3884c3"]{
       </div>
 
       <!-- Por servicio -->
+      <div class="dgrid">
+      <div class="dsec">
       <div class="slabel">Por tipo de servicio</div>
       <div class="card" id="fin-by-service" style="padding:0 16px"></div>
+      </div>
+
+      <!-- Reporte Limpieza total -->
+      <div class="dsec">
+      <div class="slabel">🧪 Reporte de Limpieza total</div>
+      <div class="card" id="fin-limpieza" style="padding:12px 16px"></div>
+      </div>
+      </div><!-- /dgrid -->
 
       <!-- Transacciones del período -->
       <div class="slabel">Transacciones</div>
@@ -2209,7 +2274,7 @@ function showClientHistory(clientId){
         <div class="hist-info">
           <div class="hist-date">${dateStr} ${v.time?'· '+v.time:''}</div>
           <div class="hist-svc">${cl.service} · <span style="color:${v.status==='done'?'var(--green)':'var(--text3)'}">${stLabel}</span></div>
-          ${(v.acidoLitros!=null||v.duracionMin!=null)?'<div class="hist-notes">🧪 '+(v.acidoLitros!=null?v.acidoLitros+' L':'')+(v.acidoLitros!=null&&v.duracionMin!=null?' · ':'')+(v.duracionMin!=null?'⏱ '+v.duracionMin+' min':'')+'</div>':''}
+          ${(v.acidoLitros!=null||v.duracionMin!=null||v.dificultad)?'<div class="hist-notes">🧪 '+[v.acidoLitros!=null?v.acidoLitros+' L':'',v.duracionMin!=null?'⏱ '+v.duracionMin+' min':'',v.dificultad?(DIF_ICON[v.dificultad]||'')+' '+(DIF_LABEL[v.dificultad]||v.dificultad):''].filter(Boolean).join(' · ')+'</div>':''}
           ${v.notes?'<div class="hist-notes">📝 '+v.notes+'</div>':''}
         </div>
         <div style="font-size:11px;font-weight:800;color:var(--c6);flex-shrink:0">
@@ -2974,6 +3039,13 @@ function openActions(dateKey,idx){
   document.getElementById('as-remove-future').style.display = e.recurrenceId ? 'flex' : 'none';
   openModal('actions');
 }
+const DIF_LABEL={facil:'Fácil',medio:'Medio',dificil:'Difícil'};
+const DIF_ICON={facil:'🟢',medio:'🟡',dificil:'🔴'};
+function setDificultad(v){
+  const h=document.getElementById('dl-dificultad'); if(!h) return;
+  h.value = (h.value===v && v) ? '' : v; // tocar de nuevo deselecciona
+  document.querySelectorAll('#dl-dif-pills .dif-pill').forEach(el=>el.classList.toggle('on',el.dataset.v===h.value));
+}
 function asEditDetalleLimpieza(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
@@ -2981,6 +3053,7 @@ function asEditDetalleLimpieza(){
   document.getElementById('dl-name').value=c.n;
   document.getElementById('dl-acido').value=e.acidoLitros??'';
   document.getElementById('dl-tiempo').value=e.duracionMin??'';
+  setDificultad(e.dificultad||'');
   closeModal('actions');
   openModal('detlimp');
 }
@@ -2992,10 +3065,12 @@ function saveDetalleLimpieza(){
   const tiempo = document.getElementById('dl-tiempo').value;
   e.acidoLitros = acido!=='' ? parseFloat(acido.replace(',','.')) : null;
   e.duracionMin = tiempo!=='' ? parseInt(tiempo) : null;
+  e.dificultad = document.getElementById('dl-dificultad').value || null;
   dbSave();
   closeModal('detlimp');
   toast('✓ Detalle de la limpieza guardado');
   asCtx=null;
+  renderFinanzas();
   // Igual que con el valor editado: se sube a Supabase (columnas
   // acido_litros / duracion_min en trabajos) si el trabajo ya está
   // sincronizado.
@@ -3727,6 +3802,56 @@ function getFilterRange(f){
   }
 }
 
+function renderReporteLimpieza(from,to){
+  const box=document.getElementById('fin-limpieza'); if(!box) return;
+  const rows=[];
+  Object.keys(schedule).filter(k=>k>=from&&k<=to).sort().forEach(k=>{
+    (schedule[k]||[]).forEach((e,idx)=>{
+      if(e.status!=='done') return;
+      const cl=getClientById(e.clientId);
+      if(!cl||cl.deleted) return;
+      const esLimp=/limpieza/i.test(cl.service||'')||(cl.servicios||[]).some(x=>/limpieza/i.test(x));
+      if(!esLimp) return;
+      rows.push({k,idx,cl,e});
+    });
+  });
+  if(!rows.length){ box.innerHTML='<div class="nodata" style="padding:8px 0">Sin limpiezas completadas en este período</div>'; return; }
+  const conAcido=rows.filter(r=>r.e.acidoLitros!=null);
+  const conTiempo=rows.filter(r=>r.e.duracionMin!=null);
+  const sumA=conAcido.reduce((a,r)=>a+r.e.acidoLitros,0);
+  const sumT=conTiempo.reduce((a,r)=>a+r.e.duracionMin,0);
+  const dif={facil:0,medio:0,dificil:0};
+  rows.forEach(r=>{ if(dif[r.e.dificultad]!==undefined) dif[r.e.dificultad]++; });
+  const sinDif=rows.length-dif.facil-dif.medio-dif.dificil;
+  const n1=v=>(Math.round(v*10)/10).toLocaleString('es-AR');
+  const fmtMin=m=>m>=60?Math.floor(m/60)+' h '+(Math.round(m%60))+' min':Math.round(m)+' min';
+  const kpi=(l,v,sub)=>`<div class="fin-kpi"><div class="fin-kpi-label">${l}</div><div class="fin-kpi-val" style="color:var(--c6)">${v}</div><div class="fin-kpi-sub">${sub}</div></div>`;
+  const dc=(c,n,l)=>`<div style="flex:1;text-align:center;padding:8px 4px;border-radius:10px;background:var(--pdim);font-size:12px;font-weight:700;color:var(--c7)">${c} ${l}<div style="font-size:18px">${n}</div></div>`;
+  const list=[...rows].reverse().map(r=>{
+    const e=r.e;
+    const partes=[e.acidoLitros!=null?'🧪 '+n1(e.acidoLitros)+' L':'',e.duracionMin!=null?'⏱ '+e.duracionMin+' min':'',e.dificultad?DIF_ICON[e.dificultad]+' '+DIF_LABEL[e.dificultad]:''].filter(Boolean);
+    return `<div class="fr" style="cursor:pointer" onclick="reporteEditarLimpieza('${r.k}',${r.idx})" title="Tocar para editar">
+      <div><div class="fc">${r.cl.n}</div><div class="fd">${r.k}</div></div>
+      <div class="fd" style="text-align:right;color:var(--c6)">${partes.length?partes.join(' · '):'<span style="color:var(--text3)">sin datos · tocar para cargar</span>'}</div></div>`;
+  }).join('');
+  box.innerHTML=`
+    <div class="fin-kpis" style="padding:0;margin-bottom:10px">
+      ${kpi('Limpiezas',rows.length,(conAcido.length||conTiempo.length)?'con datos: '+Math.max(conAcido.length,conTiempo.length):'sin datos aún')}
+      ${kpi('Ácido total',n1(sumA)+' L',conAcido.length?'prom. '+n1(sumA/conAcido.length)+' L':'–')}
+      ${kpi('Tiempo total',conTiempo.length?fmtMin(sumT):'–',conTiempo.length?'prom. '+fmtMin(sumT/conTiempo.length):'–')}
+      ${kpi('Ácido / hora',sumT>0&&conAcido.length?n1(sumA/(sumT/60))+' L':'–','promedio')}
+    </div>
+    <div class="mlabel" style="margin:6px 0">Dificultad</div>
+    <div style="display:flex;gap:8px;margin-bottom:6px">${dc('🟢',dif.facil,'Fácil')}${dc('🟡',dif.medio,'Medio')}${dc('🔴',dif.dificil,'Difícil')}</div>
+    ${sinDif?`<div class="fd" style="margin-bottom:6px">${sinDif} sin valorar</div>`:''}
+    <div class="mlabel" style="margin:10px 0 0">Detalle por limpieza</div>
+    ${list}`;
+}
+function reporteEditarLimpieza(dateKey,idx){
+  asCtx={dateKey,idx,fromReport:true};
+  asEditDetalleLimpieza();
+}
+
 function renderFinanzas(){
   if(!document.getElementById('pg-finanzas').classList.contains('on')) return;
 
@@ -3795,6 +3920,8 @@ function renderFinanzas(){
         </div>`).join('');
     }
   }
+
+  renderReporteLimpieza(from,to);
 
   // Lista de transacciones del período
   const transEl = document.getElementById('fin-trans-list');
@@ -3941,6 +4068,14 @@ function deleteNota(id){
 // ════════════════════════════════════════════════════════════
 let _calOpen = false;
 let _calRendered = false;
+
+// En PC el calendario del Inicio se muestra siempre abierto (no hay botón).
+const _mqDesk = window.matchMedia('(min-width:1000px)');
+function cpDeskCal(){
+  if(_mqDesk.matches && !_calOpen){ try{ toggleCalDashboard(); }catch(e){} }
+}
+window.addEventListener('load',()=>setTimeout(cpDeskCal,400));
+if(_mqDesk.addEventListener) _mqDesk.addEventListener('change',cpDeskCal);
 
 function toggleCalDashboard(){
   _calOpen = !_calOpen;
@@ -5415,11 +5550,13 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
   const preciosLocales = new Map();
   const acidoLocal = new Map();
   const duracionLocal = new Map();
+  const dificultadLocal = new Map();
   schedule[dateKey].forEach(j=>{
     if(!j.supabase_id) return;
     if(j.price!=null) preciosLocales.set(j.supabase_id, j.price);
     if(j.acidoLitros!=null) acidoLocal.set(j.supabase_id, j.acidoLitros);
     if(j.duracionMin!=null) duracionLocal.set(j.supabase_id, j.duracionMin);
+    if(j.dificultad!=null) dificultadLocal.set(j.supabase_id, j.dificultad);
   });
 
   const pendientes = schedule[dateKey].filter(j=>!j.supabase_id);
@@ -5438,7 +5575,8 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
       price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
       acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
-      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))});
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
+      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -5485,11 +5623,13 @@ async function syncTrabajosForDate(dateKey){
   const preciosLocales = new Map();
   const acidoLocal = new Map();
   const duracionLocal = new Map();
+  const dificultadLocal = new Map();
   schedule[dateKey].forEach(j=>{
     if(!j.supabase_id) return;
     if(j.price!=null) preciosLocales.set(j.supabase_id, j.price);
     if(j.acidoLitros!=null) acidoLocal.set(j.supabase_id, j.acidoLitros);
     if(j.duracionMin!=null) duracionLocal.set(j.supabase_id, j.duracionMin);
+    if(j.dificultad!=null) dificultadLocal.set(j.supabase_id, j.dificultad);
   });
 
   let _diagAsignados=0, _diagSinCliente=0;
@@ -5509,7 +5649,8 @@ async function syncTrabajosForDate(dateKey){
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
       price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
       acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
-      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))});
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
+      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
@@ -5652,11 +5793,17 @@ async function saveTrabajoToSupabase(job,dateKey){
       notas:job.notes||'',status:job.status||'pend',recurrence_id:job.recurrenceId||null,
       precio:job.price??null,acido_litros:job.acidoLitros??null,duracion_min:job.duracionMin??null,
       updated_at:new Date().toISOString()};
+    // 'dificultad' requiere la columna en Supabase; si todavía no existe, se
+    // reintenta sin ella para no romper el guardado del resto de la tarea.
+    if(job.dificultad!=null && !window._noColDificultad) p.dificultad=job.dificultad;
+    const _esErrDif = er => er && /dificultad/i.test((er.message||'')+(er.details||''));
     if(job.supabase_id){
-      const {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
+      let {error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id);
+      if(error && p.dificultad!==undefined && _esErrDif(error)){ window._noColDificultad=true; delete p.dificultad; ({error}=await sb.from('trabajos').update(p).eq('id',job.supabase_id)); }
       if(error) throw error;
     } else {
-      const {data,error}=await sb.from('trabajos').insert(p).select().single();
+      let {data,error}=await sb.from('trabajos').insert(p).select().single();
+      if(error && p.dificultad!==undefined && _esErrDif(error)){ window._noColDificultad=true; delete p.dificultad; ({data,error}=await sb.from('trabajos').insert(p).select().single()); }
       if(error) throw error;
       if(data) job.supabase_id=data.id;
       else throw new Error('Supabase no devolvió el ID del trabajo');
@@ -6828,7 +6975,7 @@ function exportToGoogleCalendar(dateKey){
     </div>
     <div class="asheet-item" onclick="asEditDetalleLimpieza()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Ácido usado / tiempo
+      Detalle limpieza: ácido / tiempo / dificultad
     </div>
     <div class="asheet-item" onclick="asNotes()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -6876,7 +7023,7 @@ function exportToGoogleCalendar(dateKey){
 <div class="modal-overlay" id="modal-detlimp" onclick="if(event.target===this)closeModal('detlimp')">
   <div class="modal-box">
     <div class="mhandle"></div>
-    <div class="mtitle">Ácido usado / tiempo</div>
+    <div class="mtitle">Detalle de limpieza</div>
     <div class="mfield">
       <div class="mlabel">Cliente</div>
       <input class="minput" id="dl-name" type="text" disabled>
@@ -6888,6 +7035,15 @@ function exportToGoogleCalendar(dateKey){
     <div class="mfield">
       <div class="mlabel">Tiempo que tardó (minutos)</div>
       <input class="minput" id="dl-tiempo" type="number" placeholder="Ej: 45">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Dificultad</div>
+      <input type="hidden" id="dl-dificultad" value="">
+      <div class="dif-pills" id="dl-dif-pills">
+        <div class="dif-pill" data-v="facil" onclick="setDificultad('facil')">🟢 Fácil</div>
+        <div class="dif-pill" data-v="medio" onclick="setDificultad('medio')">🟡 Medio</div>
+        <div class="dif-pill" data-v="dificil" onclick="setDificultad('dificil')">🔴 Difícil</div>
+      </div>
     </div>
     <div class="mactions">
       <div class="bcancel" onclick="closeModal('detlimp')">Cancelar</div>
