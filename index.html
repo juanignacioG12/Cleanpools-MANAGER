@@ -664,7 +664,7 @@ textarea.minput{resize:vertical;min-height:70px;font-family:inherit}
   font-size:9px;font-weight:800;color:var(--c1);flex-shrink:0;
 }
 .user-badge-name{font-size:10px;font-weight:700;color:var(--text2);max-width:70px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.user-badge-rol{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.user-badge-rol{display:none !important;font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
 
 /* ── EMPLEADO VIEW ── */
 .emp-job-card{
@@ -1168,7 +1168,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
         <div class="user-badge-av" id="user-badge-av">JG</div>
         <div>
           <div class="user-badge-name" id="user-badge-name">Juan</div>
-          <div class="user-badge-rol" id="user-badge-rol">admin</div>
+          <div class="user-badge-rol" id="user-badge-rol"></div>
         </div>
         <div id="sync-pending-badge" title="Cambios esperando conexión" style="display:none;margin-left:6px;background:#f5a623;color:#fff;font-size:10px;font-weight:800;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 4px">0</div>
       </div>
@@ -6286,7 +6286,7 @@ function populateGrMemberSelect(){
   const sel = document.getElementById('gr-member-add');
   const available = _loginUsersCache.filter(u=>!_grMembersTemp.includes(u.id));
   sel.innerHTML = '<option value="">+ Agregar integrante...</option>' +
-    available.map(u=>`<option value="${u.id}">${u.nombre} (${u.rol})</option>`).join('');
+    available.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join('');
 }
 
 function grupoAddMember(){
@@ -6357,7 +6357,7 @@ async function populateWorkAssignSelect(preselect){
   if(!sel) return;
   await refreshUsersCache();
   const userOpts = _loginUsersCache.map(u=>
-    `<option value="user:${u.id}">👤 ${u.nombre} (${u.rol})</option>`
+    `<option value="user:${u.id}">👤 ${esc(u.nombre)}</option>`
   ).join('');
   const groupOpts = grupos.length
     ? grupos.map(g=>`<option value="group:${g.id}">🏷 Grupo: ${g.nombre} (${(g.members||[]).length} personas)</option>`).join('')
@@ -6500,7 +6500,7 @@ async function openAsignar(dateKey,idx){
     const {data,error}=await sb.from('users').select('id,nombre,rol').eq('activo',true).order('nombre');
     if(error) throw error;
     sel.innerHTML='<option value="">— Sin asignar —</option>'+
-      (data||[]).map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+      (data||[]).map(u=>'<option value="'+u.id+'">'+esc(u.nombre)+'</option>').join('');
     // Pre-seleccionar asignación existente
     if(e.asignaciones&&e.asignaciones.length){
       sel.value=e.asignaciones[0].user_id||'';
