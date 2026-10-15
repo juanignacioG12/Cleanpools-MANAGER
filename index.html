@@ -1098,6 +1098,25 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
 [style*="font-size:9px"]{font-size:10.5px!important}
 [style*="font-size:11px"]{font-size:12px!important}
 @media (min-width:1000px){ .bni{font-size:14px} }
+
+/* ── CALCULADORA MANTENIMIENTO PLUS ── */
+.cc-head{display:flex;align-items:center;gap:10px;padding:14px 16px 4px}
+.cc-back{width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;flex-shrink:0}
+.cc-title{font-size:16px;font-weight:800;color:var(--text)}
+.cc-sub{font-size:12px;color:var(--text3);padding:0 16px 10px}
+.cc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cc-hero{background:linear-gradient(135deg,var(--c2),var(--c4));border:none;color:#fff}
+.cc-hero::before{display:none}
+.cc-chip{display:inline-block;font-size:11px;font-weight:800;background:rgba(255,255,255,.18);color:#fff;border-radius:20px;padding:3px 11px}
+.cc-price{display:inline-block;margin:8px 0 2px;font-size:44px;font-weight:900;line-height:1;background:#FFD60A;color:#2E2E2E;border-radius:10px;padding:5px 14px}
+.cc-hero p{font-size:12px;color:rgba(255,255,255,.88);margin-top:6px}
+.cc-dl{display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:13px}
+.cc-dl dt{color:var(--text3)}
+.cc-dl dd{text-align:right;font-weight:700;color:var(--text)}
+.cc-sep{grid-column:1/-1;border-top:1px solid var(--border)}
+.cc-warn{margin-top:12px;font-size:12px;color:var(--amber);background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.25);border-radius:9px;padding:9px 11px}
+.cc-set{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.cc-set .mlabel{text-transform:none;letter-spacing:0;font-weight:600}
 </style>
 </head>
 <body>
@@ -1114,7 +1133,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
   </svg>
   <div class="login-title">Clean Pools SJ</div>
   <div class="login-sub">Ingresá tu PIN para continuar</div>
-  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-08-21-b</div>
+  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-15-a</div>
 
   <!-- Selector de usuario -->
   <div class="login-user-select">
@@ -1247,6 +1266,13 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
       <div class="slabel">Oportunidades</div>
       <div class="card" id="oportunidades-card" style="padding:0 16px">
         <div id="oportunidades-list"></div>
+      </div>
+
+      <div class="slabel">Herramientas</div>
+      <div class="card" style="cursor:pointer;display:flex;align-items:center;gap:12px" onclick="showPage('calculadora')">
+        <div style="font-size:24px">🧮</div>
+        <div style="flex:1"><div class="ctitle">Calculadora Mantenimiento Plus</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Precio por visita según las medidas de la pileta</div></div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16" style="color:var(--text3)"><path d="M9 18l6-6-6-6"/></svg>
       </div>
     </div>
 
@@ -1571,6 +1597,32 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
       </div>
     </div>
 
+
+    <!-- CALCULADORA MANTENIMIENTO PLUS -->
+    <div id="pg-calculadora" class="page">
+      <div class="cc-head">
+        <div class="cc-back" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M15 18l-6-6 6-6"/></svg></div>
+        <div class="cc-title">🧮 Mantenimiento Plus</div>
+      </div>
+      <div class="cc-sub">Ingresá las medidas y obtené el precio por visita con cloro incluido.</div>
+      <div class="card">
+        <div class="cc-grid">
+          <div><div class="mlabel">Largo (m)</div><input id="cc-l" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="8" oninput="calcPlusUpdate()"></div>
+          <div><div class="mlabel">Ancho (m)</div><input id="cc-a" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="4" oninput="calcPlusUpdate()"></div>
+          <div><div class="mlabel">Profundidad (m)</div><input id="cc-p" class="minput" type="number" inputmode="decimal" min="0" step="0.1" oninput="calcPlusUpdate()"></div>
+        </div>
+      </div>
+      <div id="cc-res" class="card cc-hero"></div>
+      <div id="cc-det" class="card"></div>
+      <div class="card">
+        <details>
+          <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text)">⚙️ Ajustar precios y dosis</summary>
+          <div class="cc-set" id="cc-set"></div>
+          <div class="bcancel" style="margin-top:12px" onclick="calcPlusReset()">Volver a los valores originales</div>
+        </details>
+      </div>
+    </div>
+
   </div><!-- /pages -->
 
   <!-- BOTTOM NAV — 5 tabs optimizados (sin Agenda, sin Hábitos) -->
@@ -1625,6 +1677,12 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     <span class="fab-opt-lbl">Nueva Tarea</span>
     <div class="fab-opt-ico">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </div>
+  </div>
+  <div class="fab-opt" onclick="closeFab();showPage('calculadora')">
+    <span class="fab-opt-lbl">Calculadora Plus</span>
+    <div class="fab-opt-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="18" height="18"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8" y2="11"/><line x1="12" y1="11" x2="12" y2="11"/><line x1="16" y1="11" x2="16" y2="11"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="12" y1="16" x2="12" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
     </div>
   </div>
 </div>
@@ -3890,6 +3948,7 @@ function isPageAllowedForRole(id){
     notas:     ()=> currentUser?.rol==='admin',
     mapa:      ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
     usuarios:  ()=> currentUser?.rol==='admin',
+    calculadora: ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
     // ⚠ Se me había pasado esta: un empleado que quedó "pegado" en la
     // Agenda general (por el bug del swipe, ya corregido) nunca era
     // redirigido a su propia pantalla de trabajos, porque esta página no
@@ -3926,6 +3985,7 @@ function showPage(id, tab){
   if(id==='agenda')  renderCalendar();
   if(id==='finanzas') renderFinanzas();
   if(id==='notas')   renderNotas();
+  if(id==='calculadora') calcPlusInit();
 
   // Guardar página activa en localStorage
   try{ localStorage.setItem('cp_page_v1', id); }catch(e){}
@@ -7390,5 +7450,86 @@ function exportToGoogleCalendar(dateKey){
   </div>
 </div>
 
+
+<script>
+// ════════════════════════════════════════════
+// CALCULADORA MANTENIMIENTO PLUS (por medidas de pileta)
+// ════════════════════════════════════════════
+(function(){
+  const D={pas:2340,gra:13500,mC:20000,mG:25000,pLit:27000,pRef:20000,gB:250,gTop:75000,lMed:48000,gG:40,gL:10000,prof:1.5};
+  const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mC:'Mantenimiento básico ($)',mG:'Mantenimiento piletas grandes ($)',pLit:'Litros por pastilla (siempre redondea hacia arriba)',pRef:'Litros por pastilla de tu dosis (solo para el aviso)',gB:'Granulado base por semana (g)',gTop:'Litros que cubre el granulado base',lMed:'Litros del mantenimiento básico',gG:'Gramos de granulado (dosis)',gL:'Litros de esa dosis',prof:'Profundidad inicial (m)'};
+  const KEY='cp_calcplus_v1';
+  let S=Object.assign({},D);
+  try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
+  const $=id=>document.getElementById(id);
+  const money=n=>'$'+Math.round(n).toLocaleString('es-AR');
+  const r500=n=>Math.round(n/500)*500;
+  const num=n=>n.toLocaleString('es-AR',{maximumFractionDigits:1});
+  function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+
+  function calc(){
+    const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
+    const res=$('cc-res'),det=$('cc-det');
+    if(!(L>0&&A>0&&P>0)){
+      res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
+      det.style.display='none'; return;
+    }
+    det.style.display='';
+    const area=L*A, lit=Math.round(area*P*1000);
+    const pas=Math.max(1,Math.ceil(lit/S.pLit));
+    const tier=['','Chica','Mediana','Grande'][pas]||'Muy grande';
+    const gra=lit<=S.gTop?S.gB:Math.max(S.gB,Math.ceil(lit/S.gL*S.gG/50)*50);
+    const base=lit<=S.lMed?S.mC:S.mG;
+    const cloro=pas*S.pas+gra/1000*S.gra;
+    const total=r500(base+cloro);
+    const tPas=lit/S.pRef, tGra=lit/S.gL*S.gG;
+    let w='';
+    if(pas<tPas*0.8||gra<tGra*0.8){
+      w+='<div class="cc-warn">El paquete queda corto para este volumen. Según tu dosis haría falta cerca de '+num(tPas)+' pastillas y '+Math.round(tGra)+' g de granulado por semana. Revisá el precio antes de ofrecerlo.</div>';
+    }
+    if(tier==='Muy grande'){
+      w+='<div class="cc-warn">Pileta muy grande: el precio se calculó con tu dosis completa. Conviene confirmarlo con el cliente.</div>';
+    }
+    res.innerHTML='<span class="cc-chip">Pileta '+tier.toLowerCase()+'</span>'
+      +'<div><span class="cc-price">'+money(total)+'</span></div>'
+      +'<p>por visita semanal, con cloro incluido</p>'
+      +'<p>'+money(total*4)+' por 4 visitas</p>';
+    det.innerHTML='<div class="chdr"><div class="ctitle">Detalle</div></div><dl class="cc-dl">'
+      +'<dt>Superficie</dt><dd>'+num(area)+' m²</dd>'
+      +'<dt>Volumen aproximado</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
+      +'<div class="cc-sep"></div>'
+      +'<dt>Cloro granulado por semana</dt><dd>'+gra+' g</dd>'
+      +'<dt>Pastillas por semana</dt><dd>'+pas+'</dd>'
+      +'<dt>Cloro a precio de venta</dt><dd>'+money(cloro)+'</dd>'
+      +'<dt>Mantenimiento base</dt><dd>'+money(base)+'</dd>'
+      +'<dt>Suma sin redondear</dt><dd>'+money(base+cloro)+'</dd>'
+      +'</dl>'+w;
+  }
+
+  function buildSettings(){
+    const box=$('cc-set'); if(!box) return;
+    box.innerHTML=Object.keys(D).map(function(k){
+      return '<div><div class="mlabel">'+N[k]+'</div><input class="minput" type="number" inputmode="decimal" step="any" data-k="'+k+'" value="'+S[k]+'"></div>';
+    }).join('');
+    box.querySelectorAll('input').forEach(function(i){
+      i.addEventListener('input',function(){
+        const v=parseFloat(i.value);
+        if(v>0){ S[i.dataset.k]=v; save(); calc(); }
+      });
+    });
+  }
+
+  window.calcPlusUpdate=calc;
+  window.calcPlusInit=function(){
+    if(!$('cc-p').value) $('cc-p').value=S.prof;
+    buildSettings(); calc();
+  };
+  window.calcPlusReset=function(){
+    S=Object.assign({},D); save();
+    $('cc-p').value=S.prof; buildSettings(); calc();
+    if(typeof toast==='function') toast('Valores originales restaurados ✓');
+  };
+})();
+</script>
 </body>
 </html>
