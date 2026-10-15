@@ -3539,9 +3539,12 @@ function confirmYes(){
 
 
 // ── MODAL ──
+function canCreateTasks(){ return currentUser?.rol!=='empleado'; }
 function openModal(id){
   const el=document.getElementById('modal-'+id);
   if(!el)return;
+  // El empleado solo puede ver sus tareas: no crea tareas ni clientes
+  if((id==='work'||id==='cliente') && !canCreateTasks()){ toast('⚠ Tu usuario no puede crear tareas'); return; }
   // "+ Nueva" desde el botón: si quedó una edición a medias, limpiar el formulario
   if(id==='nota' && !_notaOpeningForEdit){ resetNotaForm(); }
   _notaOpeningForEdit=false;
@@ -3714,6 +3717,7 @@ function generateRecurrenceDates(baseDateStr, type, n, endStr){
 }
 
 function saveWork(){
+  if(!canCreateTasks()){ toast('⚠ Tu usuario no puede crear tareas'); return; }
   const name=document.getElementById('nw-cli').value.trim();
   if(!name){toast('⚠ Ingresá el cliente');return;}
 
@@ -5407,7 +5411,7 @@ async function initLogin(){
     if(error) throw error;
     loginUsers = data||[];
     sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>'+
-      loginUsers.map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+      loginUsers.map(u=>'<option value="'+u.id+'">'+esc(u.nombre)+'</option>').join('');
   }catch(e){
     // Sin conexión o timeout → mostrar opción de ingreso offline
     sel.innerHTML = '<option value="">⚠ Sin conexión — reintentá</option>';
@@ -5427,7 +5431,7 @@ async function loadLoginUsers(){
     if(error) throw error;
     loginUsers = data||[];
     if(sel) sel.innerHTML = '<option value="">— Seleccioná tu nombre —</option>'+
-      loginUsers.map(u=>'<option value="'+u.id+'">'+u.nombre+' ('+u.rol+')</option>').join('');
+      loginUsers.map(u=>'<option value="'+u.id+'">'+esc(u.nombre)+'</option>').join('');
     const errEl=document.getElementById('login-error');
     if(errEl) errEl.textContent='';
   }catch(e){
@@ -5475,7 +5479,8 @@ function enterApp(){
     const av=(currentUser.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     document.getElementById('user-badge-av').textContent=av;
     document.getElementById('user-badge-name').textContent=(currentUser.nombre||'').split(' ')[0];
-    document.getElementById('user-badge-rol').textContent=currentUser.rol||'';
+    // El rango no se muestra: cada usuario ve solo su nombre
+    const _rolEl=document.getElementById('user-badge-rol'); if(_rolEl){ _rolEl.textContent=''; _rolEl.style.display='none'; }
   }
   updateSyncBadge();
 
@@ -5592,6 +5597,8 @@ function applyRoleRestrictions(){
     'bni-finanzas':isAdmin,'bni-notas':isAdmin,'bni-mapa':isAdm
   };
   Object.entries(navMap).forEach(([id,show])=>{ const el=document.getElementById(id); if(el)el.style.display=show?'':'none'; });
+  // El empleado no ve el botón "+" (no crea tareas ni clientes)
+  ['fab-btn','fab-menu','fab-backdrop'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=isEmpleado?'none':''; });
   if(isAdmin) addUsuariosTab();
   if(isEmpleado){ showPage('empleado',null); renderEmpleadoView(); }
   else showPage('dashboard',null);
