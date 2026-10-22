@@ -1137,7 +1137,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
   </svg>
   <div class="login-title">Clean Pools SJ</div>
   <div class="login-sub">Ingresá tu PIN para continuar</div>
-  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-15-a</div>
+  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-21-b</div>
 
   <!-- Selector de usuario -->
   <div class="login-user-select">
@@ -7465,14 +7465,14 @@ function exportToGoogleCalendar(dateKey){
 (function(){
 
 const D={pas:2340,gra:13500,mG:25000,pN:20000,pV:10000,gG:50,gL:10000,
-  l1:20000,l2:30000,l3:40000,l4:50000,
+  l1:25000,l2:35000,l3:45000,l4:55000,
   n1:25000,n2:27000,n3:30000,n4:35000,
-  v1:28000,v2:30000,v3:33000,v4:40000,prof:1.5};
-const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mG:'Mantenimiento base para más de 50.000 L ($)',pN:'Litros por pastilla, tarifa normal',pV:'Litros por pastilla, tarifa de verano',gG:'Gramos de granulado (dosis)',gL:'Litros de esa dosis',
+  v1:28000,v2:30000,v3:35000,v4:40000,prof:1.5};
+const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mG:'Mantenimiento base para más de 55.000 L ($)',pN:'Litros por pastilla, tarifa normal',pV:'Litros por pastilla, tarifa de verano',gG:'Gramos de granulado (dosis)',gL:'Litros de esa dosis',
   l1:'Tramo 1: hasta (L)',l2:'Tramo 2: hasta (L)',l3:'Tramo 3: hasta (L)',l4:'Tramo 4: hasta (L)',
   n1:'Normal, tramo 1 ($)',n2:'Normal, tramo 2 ($)',n3:'Normal, tramo 3 ($)',n4:'Normal, tramo 4 ($)',
   v1:'Verano, tramo 1 ($)',v2:'Verano, tramo 2 ($)',v3:'Verano, tramo 3 ($)',v4:'Verano, tramo 4 ($)',prof:'Profundidad inicial (m)'};
-const KEY='cp_calcplus_v2', MKEY='cp_calcplus_mode';
+const KEY='cp_calcplus_v3', MKEY='cp_calcplus_mode';
 let S=Object.assign({},D), VER=false;
 try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
 try{ VER=localStorage.getItem(MKEY)==='1'; }catch(e){}
