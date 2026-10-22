@@ -1104,6 +1104,10 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
 .cc-back{width:34px;height:34px;border-radius:10px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2);cursor:pointer;flex-shrink:0}
 .cc-title{font-size:16px;font-weight:800;color:var(--text)}
 .cc-sub{font-size:12px;color:var(--text3);padding:0 16px 10px}
+.cc-seg{display:flex;gap:6px;background:rgba(127,127,127,.14);border-radius:12px;padding:4px}
+.cc-seg-b{flex:1;text-align:center;padding:10px 8px;border-radius:9px;font-size:13px;font-weight:700;color:var(--text3);cursor:pointer}
+.cc-seg-b.on{background:var(--c2);color:#fff}
+.cc-seg-b.v.on{background:#F5A623;color:#2E2E2E}
 .cc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .cc-hero{background:linear-gradient(135deg,var(--c2),var(--c4));border:none;color:#fff}
 .cc-hero::before{display:none}
@@ -1605,6 +1609,9 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
         <div class="cc-title">🧮 Mantenimiento Plus</div>
       </div>
       <div class="cc-sub">Ingresá las medidas y obtené el precio por visita con cloro incluido.</div>
+      <div class="card" style="padding:8px">
+        <div class="cc-seg"><div id="cc-m-n" class="cc-seg-b on" onclick="calcPlusMode(false)">Tarifa normal</div><div id="cc-m-v" class="cc-seg-b v" onclick="calcPlusMode(true)">☀️ Verano</div></div>
+      </div>
       <div class="card">
         <div class="cc-grid">
           <div><div class="mlabel">Largo (m)</div><input id="cc-l" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="8" oninput="calcPlusUpdate()"></div>
@@ -7453,82 +7460,97 @@ function exportToGoogleCalendar(dateKey){
 
 <script>
 // ════════════════════════════════════════════
-// CALCULADORA MANTENIMIENTO PLUS (por medidas de pileta)
+// CALCULADORA MANTENIMIENTO PLUS (tarifa por litros, normal y verano)
 // ════════════════════════════════════════════
 (function(){
-  const D={pas:2340,gra:13500,mC:20000,mG:25000,pLit:27000,pRef:20000,gB:250,gTop:75000,lMed:48000,gG:40,gL:10000,prof:1.5};
-  const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mC:'Mantenimiento básico ($)',mG:'Mantenimiento piletas grandes ($)',pLit:'Litros por pastilla (siempre redondea hacia arriba)',pRef:'Litros por pastilla de tu dosis (solo para el aviso)',gB:'Granulado base por semana (g)',gTop:'Litros que cubre el granulado base',lMed:'Litros del mantenimiento básico',gG:'Gramos de granulado (dosis)',gL:'Litros de esa dosis',prof:'Profundidad inicial (m)'};
-  const KEY='cp_calcplus_v1';
-  let S=Object.assign({},D);
-  try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
-  const $=id=>document.getElementById(id);
-  const money=n=>'$'+Math.round(n).toLocaleString('es-AR');
-  const r500=n=>Math.round(n/500)*500;
-  const num=n=>n.toLocaleString('es-AR',{maximumFractionDigits:1});
-  function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 
-  function calc(){
-    const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
-    const res=$('cc-res'),det=$('cc-det');
-    if(!(L>0&&A>0&&P>0)){
-      res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
-      det.style.display='none'; return;
-    }
-    det.style.display='';
-    const area=L*A, lit=Math.round(area*P*1000);
-    const pas=Math.max(1,Math.ceil(lit/S.pLit));
-    const tier=['','Chica','Mediana','Grande'][pas]||'Muy grande';
-    const gra=lit<=S.gTop?S.gB:Math.max(S.gB,Math.ceil(lit/S.gL*S.gG/50)*50);
-    const base=lit<=S.lMed?S.mC:S.mG;
-    const cloro=pas*S.pas+gra/1000*S.gra;
-    const total=r500(base+cloro);
-    const tPas=lit/S.pRef, tGra=lit/S.gL*S.gG;
-    let w='';
-    if(pas<tPas*0.8||gra<tGra*0.8){
-      w+='<div class="cc-warn">El paquete queda corto para este volumen. Según tu dosis haría falta cerca de '+num(tPas)+' pastillas y '+Math.round(tGra)+' g de granulado por semana. Revisá el precio antes de ofrecerlo.</div>';
-    }
-    if(tier==='Muy grande'){
-      w+='<div class="cc-warn">Pileta muy grande: el precio se calculó con tu dosis completa. Conviene confirmarlo con el cliente.</div>';
-    }
-    res.innerHTML='<span class="cc-chip">Pileta '+tier.toLowerCase()+'</span>'
-      +'<div><span class="cc-price">'+money(total)+'</span></div>'
-      +'<p>por visita semanal, con cloro incluido</p>'
-      +'<p>'+money(total*4)+' por 4 visitas</p>';
-    det.innerHTML='<div class="chdr"><div class="ctitle">Detalle</div></div><dl class="cc-dl">'
-      +'<dt>Superficie</dt><dd>'+num(area)+' m²</dd>'
-      +'<dt>Volumen aproximado</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
-      +'<div class="cc-sep"></div>'
-      +'<dt>Cloro granulado por semana</dt><dd>'+gra+' g</dd>'
-      +'<dt>Pastillas por semana</dt><dd>'+pas+'</dd>'
-      +'<dt>Cloro a precio de venta</dt><dd>'+money(cloro)+'</dd>'
-      +'<dt>Mantenimiento base</dt><dd>'+money(base)+'</dd>'
-      +'<dt>Suma sin redondear</dt><dd>'+money(base+cloro)+'</dd>'
-      +'</dl>'+w;
+const D={pas:2340,gra:13500,mG:25000,pN:20000,pV:10000,gG:50,gL:10000,
+  l1:20000,l2:30000,l3:40000,l4:50000,
+  n1:25000,n2:27000,n3:30000,n4:35000,
+  v1:28000,v2:30000,v3:33000,v4:40000,prof:1.5};
+const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mG:'Mantenimiento base para más de 50.000 L ($)',pN:'Litros por pastilla, tarifa normal',pV:'Litros por pastilla, tarifa de verano',gG:'Gramos de granulado (dosis)',gL:'Litros de esa dosis',
+  l1:'Tramo 1: hasta (L)',l2:'Tramo 2: hasta (L)',l3:'Tramo 3: hasta (L)',l4:'Tramo 4: hasta (L)',
+  n1:'Normal, tramo 1 ($)',n2:'Normal, tramo 2 ($)',n3:'Normal, tramo 3 ($)',n4:'Normal, tramo 4 ($)',
+  v1:'Verano, tramo 1 ($)',v2:'Verano, tramo 2 ($)',v3:'Verano, tramo 3 ($)',v4:'Verano, tramo 4 ($)',prof:'Profundidad inicial (m)'};
+const KEY='cp_calcplus_v2', MKEY='cp_calcplus_mode';
+let S=Object.assign({},D), VER=false;
+try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
+try{ VER=localStorage.getItem(MKEY)==='1'; }catch(e){}
+const $=id=>document.getElementById(id);
+const money=n=>'$'+Math.round(n).toLocaleString('es-AR');
+const r500=n=>Math.round(n/500)*500;
+function save(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+
+function paintMode(){
+  const a=$('cc-m-n'),b=$('cc-m-v'); if(!a||!b) return;
+  a.className='cc-seg-b'+(VER?'':' on');
+  b.className='cc-seg-b v'+(VER?' on':'');
+}
+
+function calc(){
+  const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
+  const res=$('cc-res'),det=$('cc-det');
+  if(!(L>0&&A>0&&P>0)){
+    res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
+    det.style.display='none'; return;
   }
+  det.style.display='';
+  const lit=Math.round(L*A*P*1000);
+  const pas=Math.max(1,Math.ceil(lit/(VER?S.pV:S.pN)));
+  const gra=Math.max(50,Math.ceil(lit/S.gL*S.gG/50)*50);
+  const cloro=pas*S.pas+gra/1000*S.gra;
+  const lims=[S.l1,S.l2,S.l3,S.l4];
+  const prs=VER?[S.v1,S.v2,S.v3,S.v4]:[S.n1,S.n2,S.n3,S.n4];
+  const i=lims.findIndex(function(x){return lit<=x;});
+  let total,tramo,w='';
+  if(i>=0){ total=prs[i]; tramo='Hasta '+lims[i].toLocaleString('es-AR')+' L'; }
+  else{
+    total=r500(S.mG+cloro); tramo='Más de '+S.l4.toLocaleString('es-AR')+' L';
+    w='<div class="cc-warn">Pileta de más de '+S.l4.toLocaleString('es-AR')+' L: el precio se calculó con el mantenimiento base más el cloro a precio de venta. Confirmalo con el cliente.</div>';
+  }
+  res.innerHTML='<span class="cc-chip">'+(VER?'Tarifa de verano':'Tarifa normal')+'</span>'
+    +'<div><span class="cc-price">'+money(total)+'</span></div>'
+    +'<p>por visita semanal, con cloro incluido</p>'
+    +'<p>'+money(total*4)+' por 4 visitas</p>';
+  det.innerHTML='<div class="chdr"><div class="ctitle">Detalle</div></div><dl class="cc-dl">'
+    +'<dt>Volumen aproximado</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
+    +'<dt>Tramo de tarifa</dt><dd>'+tramo+'</dd>'
+    +'<div class="cc-sep"></div>'
+    +'<dt>Pastillas por semana</dt><dd>'+pas+'</dd>'
+    +'<dt>Granulado por semana</dt><dd>'+gra+' g</dd>'
+    +'<dt>Cloro a precio de venta (referencia)</dt><dd>'+money(cloro)+'</dd>'
+    +'<dt>Pastillas por mes (4 visitas)</dt><dd>'+(pas*4)+'</dd>'
+    +'<dt>Granulado por mes (4 visitas)</dt><dd>'+(gra*4)+' g</dd>'
+    +'</dl>'+w;
+}
 
-  function buildSettings(){
-    const box=$('cc-set'); if(!box) return;
-    box.innerHTML=Object.keys(D).map(function(k){
-      return '<div><div class="mlabel">'+N[k]+'</div><input class="minput" type="number" inputmode="decimal" step="any" data-k="'+k+'" value="'+S[k]+'"></div>';
-    }).join('');
-    box.querySelectorAll('input').forEach(function(i){
-      i.addEventListener('input',function(){
-        const v=parseFloat(i.value);
-        if(v>0){ S[i.dataset.k]=v; save(); calc(); }
-      });
+function buildSettings(){
+  const box=$('cc-set'); if(!box) return;
+  box.innerHTML=Object.keys(D).map(function(k){
+    return '<div><div class="mlabel">'+N[k]+'</div><input class="minput" type="number" inputmode="decimal" step="any" data-k="'+k+'" value="'+S[k]+'"></div>';
+  }).join('');
+  box.querySelectorAll('input').forEach(function(i){
+    i.addEventListener('input',function(){
+      const v=parseFloat(i.value);
+      if(v>0){ S[i.dataset.k]=v; save(); calc(); }
     });
-  }
+  });
+}
 
-  window.calcPlusUpdate=calc;
-  window.calcPlusInit=function(){
-    if(!$('cc-p').value) $('cc-p').value=S.prof;
-    buildSettings(); calc();
-  };
-  window.calcPlusReset=function(){
-    S=Object.assign({},D); save();
-    $('cc-p').value=S.prof; buildSettings(); calc();
-    if(typeof toast==='function') toast('Valores originales restaurados ✓');
-  };
+window.calcPlusUpdate=calc;
+window.calcPlusMode=function(v){
+  VER=!!v; try{ localStorage.setItem(MKEY,VER?'1':'0'); }catch(e){}
+  paintMode(); calc();
+};
+window.calcPlusInit=function(){
+  if(!$('cc-p').value) $('cc-p').value=S.prof;
+  paintMode(); buildSettings(); calc();
+};
+window.calcPlusReset=function(){
+  S=Object.assign({},D); save();
+  $('cc-p').value=S.prof; buildSettings(); calc();
+};
+
 })();
 </script>
 </body>
