@@ -1608,18 +1608,11 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
         <div class="cc-back" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M15 18l-6-6 6-6"/></svg></div>
         <div class="cc-title">🧮 Mantenimiento Plus</div>
       </div>
-      <div class="cc-sub">Ingresá las medidas (o directamente los litros) y obtené el precio por visita con cloro incluido.</div>
+      <div class="cc-sub">Ingresá las medidas y obtené el precio por visita con cloro incluido.</div>
       <div class="card" style="padding:8px">
         <div class="cc-seg"><div id="cc-m-n" class="cc-seg-b on" onclick="calcPlusMode(false)">Tarifa normal</div><div id="cc-m-v" class="cc-seg-b v" onclick="calcPlusMode(true)">☀️ Verano</div></div>
       </div>
-      <div class="card" style="padding:8px">
-        <div class="cc-seg"><div id="cc-i-m" class="cc-seg-b on" onclick="calcPlusInput('m')">📐 Por medidas</div><div id="cc-i-l" class="cc-seg-b" onclick="calcPlusInput('l')">💧 Por litros</div></div>
-      </div>
-      <div class="card" id="cc-box-l" style="display:none">
-        <div class="mlabel">Litros de la pileta</div>
-        <input id="cc-lit" class="minput" type="number" inputmode="numeric" min="0" step="100" placeholder="Ej: 48000" oninput="calcPlusUpdate()">
-      </div>
-      <div class="card" id="cc-box-m">
+      <div class="card">
         <div class="cc-grid">
           <div><div class="mlabel">Largo (m)</div><input id="cc-l" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="8" oninput="calcPlusUpdate()"></div>
           <div><div class="mlabel">Ancho (m)</div><input id="cc-a" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="4" oninput="calcPlusUpdate()"></div>
@@ -7479,11 +7472,10 @@ const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mG:'Mantenimiento 
   l1:'Tramo 1: hasta (L)',l2:'Tramo 2: hasta (L)',l3:'Tramo 3: hasta (L)',l4:'Tramo 4: hasta (L)',
   n1:'Normal, tramo 1 ($)',n2:'Normal, tramo 2 ($)',n3:'Normal, tramo 3 ($)',n4:'Normal, tramo 4 ($)',
   v1:'Verano, tramo 1 ($)',v2:'Verano, tramo 2 ($)',v3:'Verano, tramo 3 ($)',v4:'Verano, tramo 4 ($)',prof:'Profundidad inicial (m)'};
-const KEY='cp_calcplus_v3', MKEY='cp_calcplus_mode', IKEY='cp_calcplus_input';
-let S=Object.assign({},D), VER=false, LIT=false; // LIT: true = el usuario ingresa los litros directamente
+const KEY='cp_calcplus_v3', MKEY='cp_calcplus_mode';
+let S=Object.assign({},D), VER=false;
 try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
 try{ VER=localStorage.getItem(MKEY)==='1'; }catch(e){}
-try{ LIT=localStorage.getItem(IKEY)==='l'; }catch(e){}
 const $=id=>document.getElementById(id);
 const money=n=>'$'+Math.round(n).toLocaleString('es-AR');
 const r500=n=>Math.round(n/500)*500;
@@ -7495,40 +7487,16 @@ function paintMode(){
   b.className='cc-seg-b v'+(VER?' on':'');
 }
 
-function paintInput(){
-  const a=$('cc-i-m'),b=$('cc-i-l'),bm=$('cc-box-m'),bl=$('cc-box-l'); if(!a||!b||!bm||!bl) return;
-  a.className='cc-seg-b'+(LIT?'':' on');
-  b.className='cc-seg-b'+(LIT?' on':'');
-  bm.style.display=LIT?'none':'';
-  bl.style.display=LIT?'':'none';
-}
-
-// Pastillas: se redondea al entero más cercano, y desde X,5 en adelante
-// sube al siguiente (2,5 o más → 3; menos de 2,5 → 2). Antes siempre se
-// redondeaba para arriba (2,1 ya daba 3). Mínimo 1 pastilla.
-function pastillas(lit,litrosPorPastilla){
-  return Math.max(1,Math.round(lit/litrosPorPastilla+1e-9));
-}
-
 function calc(){
+  const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
   const res=$('cc-res'),det=$('cc-det');
-  let lit;
-  if(LIT){
-    lit=Math.round(parseFloat($('cc-lit').value));
-    if(!(lit>0)){
-      res.innerHTML='<p style="margin:0">Ingresá los litros de la pileta para ver el precio.</p>';
-      det.style.display='none'; return;
-    }
-  } else {
-    const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
-    if(!(L>0&&A>0&&P>0)){
-      res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
-      det.style.display='none'; return;
-    }
-    lit=Math.round(L*A*P*1000);
+  if(!(L>0&&A>0&&P>0)){
+    res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
+    det.style.display='none'; return;
   }
   det.style.display='';
-  const pas=pastillas(lit,VER?S.pV:S.pN);
+  const lit=Math.round(L*A*P*1000);
+  const pas=Math.max(1,Math.ceil(lit/(VER?S.pV:S.pN)));
   const gra=Math.max(50,Math.ceil(lit/S.gL*S.gG/50)*50);
   const cloro=pas*S.pas+gra/1000*S.gra;
   const lims=[S.l1,S.l2,S.l3,S.l4];
@@ -7545,7 +7513,7 @@ function calc(){
     +'<p>por visita semanal, con cloro incluido</p>'
     +'<p>'+money(total*4)+' por 4 visitas</p>';
   det.innerHTML='<div class="chdr"><div class="ctitle">Detalle</div></div><dl class="cc-dl">'
-    +'<dt>'+(LIT?'Volumen ingresado':'Volumen aproximado')+'</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
+    +'<dt>Volumen aproximado</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
     +'<dt>Tramo de tarifa</dt><dd>'+tramo+'</dd>'
     +'<div class="cc-sep"></div>'
     +'<dt>Pastillas por semana</dt><dd>'+pas+'</dd>'
@@ -7574,20 +7542,9 @@ window.calcPlusMode=function(v){
   VER=!!v; try{ localStorage.setItem(MKEY,VER?'1':'0'); }catch(e){}
   paintMode(); calc();
 };
-window.calcPlusInput=function(m){
-  const aLit=(m==='l');
-  // Al pasar de medidas a litros, si ya había medidas válidas y el campo
-  // de litros está vacío, se precarga con el volumen calculado.
-  if(aLit && !LIT && !$('cc-lit').value){
-    const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
-    if(L>0&&A>0&&P>0) $('cc-lit').value=Math.round(L*A*P*1000);
-  }
-  LIT=aLit; try{ localStorage.setItem(IKEY,LIT?'l':'m'); }catch(e){}
-  paintInput(); calc();
-};
 window.calcPlusInit=function(){
   if(!$('cc-p').value) $('cc-p').value=S.prof;
-  paintMode(); paintInput(); buildSettings(); calc();
+  paintMode(); buildSettings(); calc();
 };
 window.calcPlusReset=function(){
   S=Object.assign({},D); save();
