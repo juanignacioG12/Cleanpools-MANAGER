@@ -175,6 +175,8 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 /* ── PILLS ── */
 .pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;cursor:pointer;white-space:nowrap}
 .pill-count{font-weight:600;opacity:.7}
+/* Cliente inactivo: se atenúa la info (avatar, nombre, zona, precio) pero los botones de acción quedan con color normal */
+.cr-inactivo .cav,.cr-inactivo .cn,.cr-inactivo .cz,.cr-inactivo .jcard-notes{opacity:.5}
 .p-blue{background:rgba(123,189,232,.14);color:var(--c6);border:1px solid rgba(123,189,232,.3)}
 .p-teal{background:rgba(78,142,162,.14);color:var(--c5);border:1px solid rgba(78,142,162,.3)}
 .p-green{background:rgba(78,216,160,.12);color:var(--green);border:1px solid rgba(78,216,160,.25)}
@@ -1612,12 +1614,19 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
         <div class="cc-back" onclick="showPage('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M15 18l-6-6 6-6"/></svg></div>
         <div class="cc-title">🧮 Mantenimiento Plus</div>
       </div>
-      <div class="cc-sub">Ingresá las medidas y obtené el precio por visita con cloro incluido.</div>
+      <div class="cc-sub">Ingresá las medidas o los litros y obtené el precio por visita con cloro incluido.</div>
       <div class="card" style="padding:8px">
         <div class="cc-seg"><div id="cc-m-n" class="cc-seg-b on" onclick="calcPlusMode(false)">Tarifa normal</div><div id="cc-m-v" class="cc-seg-b v" onclick="calcPlusMode(true)">☀️ Verano</div></div>
       </div>
+      <div class="card" style="padding:8px">
+        <div class="cc-seg"><div id="cc-i-m" class="cc-seg-b on" onclick="calcPlusInput('m')">📐 Por medidas</div><div id="cc-i-l" class="cc-seg-b" onclick="calcPlusInput('l')">💧 Por litros</div></div>
+      </div>
       <div class="card">
-        <div class="cc-grid">
+        <div id="cc-box-l" style="display:none">
+          <div class="mlabel">Litros de la pileta</div>
+          <input id="cc-lit" class="minput" type="number" inputmode="numeric" min="0" step="100" placeholder="Ej: 48000" oninput="calcPlusUpdate()">
+        </div>
+        <div class="cc-grid" id="cc-box-m">
           <div><div class="mlabel">Largo (m)</div><input id="cc-l" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="8" oninput="calcPlusUpdate()"></div>
           <div><div class="mlabel">Ancho (m)</div><input id="cc-a" class="minput" type="number" inputmode="decimal" min="0" step="0.1" placeholder="4" oninput="calcPlusUpdate()"></div>
           <div><div class="mlabel">Profundidad (m)</div><input id="cc-p" class="minput" type="number" inputmode="decimal" min="0" step="0.1" oninput="calcPlusUpdate()"></div>
@@ -2272,6 +2281,17 @@ function showClientHistory(clientId){
     if(p.material) partes.push(p.material);
     if(partes.length) info.push('🏊 '+partes.join(' · '));
   }
+  // Mantenimiento con químicos (Plus), calculado con las medidas de la pileta del cliente
+  if(typeof calcPlusQuote==='function'){
+    const pl=cl.pileta||{}, L=Number(pl.largo), A=Number(pl.ancho), P=Number(pl.profundidad);
+    if(L>0 && A>0 && P>0){
+      const lit=Math.round(L*A*P*1000), q=calcPlusQuote(lit);
+      const f=n=>'$'+Math.round(n).toLocaleString('es-AR');
+      info.push('🧪 Mant. con químicos: '+f(q.normal.total)+' normal · '+f(q.verano.total)+' verano /visita ('+lit.toLocaleString('es-AR')+' L)'+(q.normal.over?' · pileta grande, confirmar precio':''));
+    } else {
+      info.push('🧪 Mant. con químicos: cargá largo, ancho y profundidad de la pileta para calcularlo');
+    }
+  }
   if(cl.notes)    info.push('📝 '+cl.notes);
   document.getElementById('hist-client-info').innerHTML = info.join('<br>');
 
@@ -2324,7 +2344,7 @@ function renderClients(list){
   const el=document.getElementById('client-list');
   if(!list.length){el.innerHTML='<div class="nodata">Sin resultados</div>';return;}
   el.innerHTML=list.map(c=>`
-    <div class="cr">
+    <div class="cr${c.status==='inactivo'?' cr-inactivo':''}">
       <div class="cav ${c.avc}">${c.av}</div>
       <div style="flex:1;min-width:0" onclick="showClientHistory(${c.id})">
         <div class="cn">${esc(c.n)}</div>
@@ -2333,7 +2353,8 @@ function renderClients(list){
         ${c.notes?`<div class="jcard-notes" style="margin-top:4px">📝 ${esc(c.notes)}</div>`:''}
       </div>
       <div style="text-align:right;flex-shrink:0;margin-right:4px">
-        <div style="width:7px;height:7px;border-radius:50%;background:${c.status==='activo'?'var(--c6)':'var(--amber)'};display:inline-block;margin-bottom:3px"></div>
+        <div style="width:7px;height:7px;border-radius:50%;background:${c.status==='activo'?'var(--c6)':c.status==='inactivo'?'var(--text3)':'var(--amber)'};display:inline-block;margin-bottom:3px"></div>
+        ${c.status==='inactivo'?'<div style="font-size:9px;font-weight:700;color:var(--text3);letter-spacing:.3px">INACTIVO</div>':''}
         <div style="font-size:9px;color:var(--text3)">$${(c.price/1000).toFixed(0)}K</div>
       </div>
       <div class="cr-actions">
@@ -7476,10 +7497,12 @@ const N={pas:'Precio pastilla ($)',gra:'Granulado por kg ($)',mG:'Mantenimiento 
   l1:'Tramo 1: hasta (L)',l2:'Tramo 2: hasta (L)',l3:'Tramo 3: hasta (L)',l4:'Tramo 4: hasta (L)',
   n1:'Normal, tramo 1 ($)',n2:'Normal, tramo 2 ($)',n3:'Normal, tramo 3 ($)',n4:'Normal, tramo 4 ($)',
   v1:'Verano, tramo 1 ($)',v2:'Verano, tramo 2 ($)',v3:'Verano, tramo 3 ($)',v4:'Verano, tramo 4 ($)',prof:'Profundidad inicial (m)'};
-const KEY='cp_calcplus_v3', MKEY='cp_calcplus_mode';
+const KEY='cp_calcplus_v3', MKEY='cp_calcplus_mode', IKEY='cp_calcplus_input';
 let S=Object.assign({},D), VER=false;
 try{ const sv=JSON.parse(localStorage.getItem(KEY)||'null'); if(sv) S=Object.assign({},D,sv); }catch(e){}
 try{ VER=localStorage.getItem(MKEY)==='1'; }catch(e){}
+let BYL=false; // false = por medidas, true = por litros
+try{ BYL=localStorage.getItem(IKEY)==='l'; }catch(e){}
 const $=id=>document.getElementById(id);
 const money=n=>'$'+Math.round(n).toLocaleString('es-AR');
 const r500=n=>Math.round(n/500)*500;
@@ -7491,25 +7514,52 @@ function paintMode(){
   b.className='cc-seg-b v'+(VER?' on':'');
 }
 
-function calc(){
-  const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
-  const res=$('cc-res'),det=$('cc-det');
-  if(!(L>0&&A>0&&P>0)){
-    res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
-    det.style.display='none'; return;
-  }
-  det.style.display='';
-  const lit=Math.round(L*A*P*1000);
-  const pas=Math.max(1,Math.ceil(lit/(VER?S.pV:S.pN)));
+function paintInput(){
+  const a=$('cc-i-m'),b=$('cc-i-l'),bm=$('cc-box-m'),bl=$('cc-box-l'); if(!a||!b||!bm||!bl) return;
+  a.className='cc-seg-b'+(BYL?'':' on');
+  b.className='cc-seg-b'+(BYL?' on':'');
+  bm.style.display=BYL?'none':'';
+  bl.style.display=BYL?'':'none';
+}
+
+// Cotización para un volumen en litros (la usan la calculadora y la ficha del cliente)
+function quote(lit,ver){
+  const pas=Math.max(1,Math.ceil(lit/(ver?S.pV:S.pN)));
   const gra=Math.max(50,Math.ceil(lit/S.gL*S.gG/50)*50);
   const cloro=pas*S.pas+gra/1000*S.gra;
   const lims=[S.l1,S.l2,S.l3,S.l4];
-  const prs=VER?[S.v1,S.v2,S.v3,S.v4]:[S.n1,S.n2,S.n3,S.n4];
+  const prs=ver?[S.v1,S.v2,S.v3,S.v4]:[S.n1,S.n2,S.n3,S.n4];
   const i=lims.findIndex(function(x){return lit<=x;});
-  let total,tramo,w='';
-  if(i>=0){ total=prs[i]; tramo='Hasta '+lims[i].toLocaleString('es-AR')+' L'; }
+  const over=i<0;
+  const total=over?r500(S.mG+cloro):prs[i];
+  return {pas:pas,gra:gra,cloro:cloro,lims:lims,prs:prs,i:i,over:over,total:total};
+}
+
+function calc(){
+  const res=$('cc-res'),det=$('cc-det');
+  let lit;
+  if(BYL){
+    const V=parseFloat($('cc-lit').value);
+    if(!(V>0)){
+      res.innerHTML='<p style="margin:0">Ingresá los litros de la pileta para ver el precio.</p>';
+      det.style.display='none'; return;
+    }
+    lit=Math.round(V);
+  }else{
+    const L=parseFloat($('cc-l').value),A=parseFloat($('cc-a').value),P=parseFloat($('cc-p').value);
+    if(!(L>0&&A>0&&P>0)){
+      res.innerHTML='<p style="margin:0">Completá largo, ancho y profundidad para ver el precio.</p>';
+      det.style.display='none'; return;
+    }
+    lit=Math.round(L*A*P*1000);
+  }
+  det.style.display='';
+  const q=quote(lit,VER);
+  const pas=q.pas,gra=q.gra,cloro=q.cloro,lims=q.lims,i=q.i;
+  let total=q.total,tramo,w='';
+  if(i>=0){ tramo='Hasta '+lims[i].toLocaleString('es-AR')+' L'; }
   else{
-    total=r500(S.mG+cloro); tramo='Más de '+S.l4.toLocaleString('es-AR')+' L';
+    tramo='Más de '+S.l4.toLocaleString('es-AR')+' L';
     w='<div class="cc-warn">Pileta de más de '+S.l4.toLocaleString('es-AR')+' L: el precio se calculó con el mantenimiento base más el cloro a precio de venta. Confirmalo con el cliente.</div>';
   }
   res.innerHTML='<span class="cc-chip">'+(VER?'Tarifa de verano':'Tarifa normal')+'</span>'
@@ -7517,7 +7567,7 @@ function calc(){
     +'<p>por visita semanal, con cloro incluido</p>'
     +'<p>'+money(total*4)+' por 4 visitas</p>';
   det.innerHTML='<div class="chdr"><div class="ctitle">Detalle</div></div><dl class="cc-dl">'
-    +'<dt>Volumen aproximado</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
+    +'<dt>'+(BYL?'Volumen ingresado':'Volumen aproximado')+'</dt><dd>'+lit.toLocaleString('es-AR')+' litros</dd>'
     +'<dt>Tramo de tarifa</dt><dd>'+tramo+'</dd>'
     +'<div class="cc-sep"></div>'
     +'<dt>Pastillas por semana</dt><dd>'+pas+'</dd>'
@@ -7542,13 +7592,19 @@ function buildSettings(){
 }
 
 window.calcPlusUpdate=calc;
+// Precio de Mantenimiento Plus para un volumen, en tarifa normal y de verano
+window.calcPlusQuote=function(lit){ return {normal:quote(lit,false),verano:quote(lit,true)}; };
 window.calcPlusMode=function(v){
   VER=!!v; try{ localStorage.setItem(MKEY,VER?'1':'0'); }catch(e){}
   paintMode(); calc();
 };
+window.calcPlusInput=function(m){
+  BYL=(m==='l'); try{ localStorage.setItem(IKEY,BYL?'l':'m'); }catch(e){}
+  paintInput(); calc();
+};
 window.calcPlusInit=function(){
   if(!$('cc-p').value) $('cc-p').value=S.prof;
-  paintMode(); buildSettings(); calc();
+  paintMode(); paintInput(); buildSettings(); calc();
 };
 window.calcPlusReset=function(){
   S=Object.assign({},D); save();
