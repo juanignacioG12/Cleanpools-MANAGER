@@ -11,6 +11,7 @@
 <meta name="theme-color" content="#001D39" id="meta-theme">
 <meta name="description" content="Gestión profesional de piscinas — Clean Pools SJ">
 <link rel="manifest" id="pwa-manifest">
+<link rel="icon" type="image/png" href="icon-192.png">
 <script>
 (function(){
   try{
@@ -1137,7 +1138,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
   </svg>
   <div class="login-title">Clean Pools SJ</div>
   <div class="login-sub">Ingresá tu PIN para continuar</div>
-  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-21-b</div>
+  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-24-a</div>
 
   <!-- Selector de usuario -->
   <div class="login-user-select">
@@ -1198,6 +1199,9 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
       <div class="ib" id="theme-toggle" onclick="toggleTheme()">
         <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </div>
+      <div class="ib" id="install-btn" style="display:none" title="Instalar app" onclick="installApp()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg>
       </div>
       <div class="ib" onclick="toast('📊 Exportar – próximamente')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
@@ -7551,6 +7555,27 @@ window.calcPlusReset=function(){
   $('cc-p').value=S.prof; buildSettings(); calc();
 };
 
+})();
+</script>
+
+<script>
+// ── Instalar como app (Android/Chrome: aviso nativo; iPhone: instrucciones) ──
+(function(){
+  let dp=null;
+  const btn=function(){return document.getElementById('install-btn');};
+  const standalone=function(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;};
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  function show(){const b=btn(); if(b&&!standalone()) b.style.display='';}
+  function hide(){const b=btn(); if(b) b.style.display='none';}
+  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dp=e;show();});
+  window.addEventListener('appinstalled',function(){dp=null;hide();if(typeof toast==='function')toast('App instalada ✓');});
+  window.installApp=async function(){
+    if(dp){dp.prompt();try{await dp.userChoice;}catch(e){} dp=null; hide(); return;}
+    if(typeof toast!=='function') return;
+    if(isIOS) toast('En iPhone: tocá Compartir y elegí "Agregar a pantalla de inicio"');
+    else toast('Abrí el menú del navegador y elegí "Instalar app"');
+  };
+  if(isIOS&&!standalone()) show();
 })();
 </script>
 </body>

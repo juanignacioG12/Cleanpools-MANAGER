@@ -1,7 +1,7 @@
 // Clean Pools Manager - Service Worker
 // Estrategia: red primero (siempre la versión nueva) y caché solo como respaldo sin conexión.
 // Así no hace falta tocar la versión en cada deploy.
-const CACHE = 'cp-manager-2026-10-21-b';
+const CACHE = 'cp-manager-2026-10-24-a';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
