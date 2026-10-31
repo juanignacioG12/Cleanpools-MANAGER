@@ -1172,7 +1172,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
   </svg>
   <div class="login-title">Clean Pools SJ</div>
   <div class="login-sub">Ingresá tu PIN para continuar</div>
-  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-28-a · informe de cierre</div>
+  <div style="text-align:center;font-size:10px;color:var(--text3);opacity:.5;margin-top:-8px;margin-bottom:8px">build 2026-10-28-b · valores del trabajo</div>
 
   <!-- Selector de usuario -->
   <div class="login-user-select">
@@ -1801,8 +1801,21 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     </div>
 
     <div class="mfield">
-      <div class="mlabel">Precio ($)</div>
+      <div class="mlabel">Valor del trabajo ($)</div>
       <input class="minput" id="nw-price" type="number" placeholder="Ej: 25000">
+    </div>
+    <div class="mlabel" style="margin:4px 0 6px;color:var(--c6)">Otros valores (opcional, lo que no cargues queda en $0 — si hay varias fechas se cargan en la primera)</div>
+    <div class="mfield">
+      <div class="mlabel">Venta de artículos ($)</div>
+      <input class="minput" id="nw-venta" type="number" min="0" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Trabajo extra ($)</div>
+      <input class="minput" id="nw-extra" type="number" min="0" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Gastos del trabajo ($) — arena, lijas, materiales (sin combustible)</div>
+      <input class="minput" id="nw-gastos" type="number" min="0" inputmode="numeric" placeholder="0">
     </div>
 
     <!-- FECHA -->
@@ -1914,6 +1927,12 @@ const clients=[]; // se llena dinámicamente desde Supabase (ver syncFromSupabas
 // con el tiempo (ver comentario en mapSbCliente) y causaba que se
 // mostrara un cliente totalmente distinto al esperado. Esta función
 // busca por el id real del cliente, sin importar su posición.
+// Lo cobrado por un trabajo: valor del trabajo + venta de artículos + trabajo extra.
+// (Lo que no se cargó cuenta como $0.) Lo usan todos los totales de ingresos.
+function jobIncome(e,cl){
+  const ci=(e&&e.cierre)||{};
+  return ((e&&e.price)??(cl&&cl.price)??0)+(ci.ventaProductos||0)+(ci.trabajoExtra||0);
+}
 function getClientById(id){
   if(id==null) return undefined;
   return clients.find(c=>c.id===id);
@@ -2252,7 +2271,7 @@ function statusBadge(st){
 function renderToday(){
   renderDashboard();
   const jobs=jobsFor(TODAY_KEY);
-  const total=jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
+  const total=jobs.reduce((a,j)=>a+jobIncome(j,j.client),0);
   const done=jobs.filter(j=>j.status==='done').length;
   document.getElementById('m-hoy').textContent='$'+Math.round(total/1000)+'K';
   document.getElementById('m-hoy-s').textContent=done+' de '+jobs.length+' completados';
@@ -2367,7 +2386,7 @@ function showClientHistory(clientId){
   // Estadísticas
   const done  = visits.filter(v=>v.status==='done').length;
   const total = visits.length;
-  const ingresos = visits.filter(v=>v.status==='done').reduce((sum,v)=>sum+(v.price??cl.price??0),0);
+  const ingresos = visits.filter(v=>v.status==='done').reduce((sum,v)=>sum+jobIncome(v,cl),0);
 
   document.getElementById('hs-total').textContent   = total;
   document.getElementById('hs-done').textContent    = done;
@@ -2920,7 +2939,7 @@ function renderRoute(){
 
   const rawJobs = jobsFor(routeDate);
   const jobs    = sortJobsByMode(rawJobs, routeSortMode);  // ← sort with GPS
-  const total   = jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
+  const total   = jobs.reduce((a,j)=>a+jobIncome(j,j.client),0);
 
   // Real distance using haversine from base
   const base = baseLocation || ZONE_CENTERS['Capital'];
@@ -3068,7 +3087,7 @@ function generarRecorrido(quiet){
   if(_recorridoJobs.length) totalKm += haversineKm(prevPt, basePt);
 
   const totalMin  = Math.round(totalKm/30*60) + _recorridoJobs.length * 15;
-  const totalFact = _recorridoJobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
+  const totalFact = _recorridoJobs.reduce((a,j)=>a+jobIncome(j,j.client),0);
 
   // Actualizar métricas del panel
   document.getElementById('rc-paradas').textContent = _recorridoJobs.length;
@@ -3390,11 +3409,13 @@ function asEditDetalleLimpieza(){
   document.getElementById('dl-tiempo').value=e.duracionMin!=null?Math.round(e.duracionMin/60*100)/100:'';
   setDificultad(e.dificultad||'');
   const ci=e.cierre||{};
+  const setv=(id,v)=>{ document.getElementById(id).value=(v!=null&&v!==0)?v:''; };
+  document.getElementById('dl-valor').value=(e.price??c.price??'');
+  setv('dl-prod',ci.ventaProductos);
+  setv('dl-extra',ci.trabajoExtra);
+  setv('dl-gastos',(ci.gastos!=null?ci.gastos:ci.costoArena)); // costoArena = nombre viejo del mismo dato
   document.getElementById('dl-tipo').value=ci.tipo||'';
   document.getElementById('dl-mo').value=ci.manoObra!=null?ci.manoObra:'';
-  document.getElementById('dl-arena').value=ci.costoArena!=null?ci.costoArena:'';
-  document.getElementById('dl-arena-pend').checked=!!ci.arenaPendiente;
-  document.getElementById('dl-prod').value=ci.ventaProductos!=null?ci.ventaProductos:'';
   closeModal('actions');
   openModal('detlimp');
 }
@@ -3408,10 +3429,14 @@ function saveDetalleLimpieza(){
   const hs = tiempo!=='' ? parseFloat(String(tiempo).replace(',','.')) : NaN;
   e.duracionMin = isNaN(hs) ? null : Math.round(hs*60);
   e.dificultad = document.getElementById('dl-dificultad').value || null;
-  // Datos para el informe de cierre (un solo campo 'cierre' que viaja a Supabase)
+  // Valores y datos para el informe (un solo campo 'cierre' que viaja a Supabase).
+  // Lo que no se carga queda en 0 (no se guarda).
   const num=id=>{ const v=document.getElementById(id).value; if(v==='') return null; const n=parseFloat(String(v).replace(',','.')); return isNaN(n)?null:n; };
-  const ci={ tipo:document.getElementById('dl-tipo').value||null, manoObra:num('dl-mo'), costoArena:num('dl-arena'),
-             arenaPendiente:document.getElementById('dl-arena-pend').checked||null, ventaProductos:num('dl-prod') };
+  const nz=v=>(v&&v>0)?v:null;
+  const valor=num('dl-valor');
+  if(valor!=null && valor!==(e.price??getClientById(e.clientId)?.price)) e.price=valor;
+  const ci={ tipo:document.getElementById('dl-tipo').value||null, manoObra:num('dl-mo'),
+             gastos:nz(num('dl-gastos')), trabajoExtra:nz(num('dl-extra')), ventaProductos:nz(num('dl-prod')) };
   e.cierre = Object.values(ci).some(v=>v!=null) ? ci : null;
   dbSave();
   closeModal('detlimp');
@@ -3737,6 +3762,7 @@ function resetWorkForm(){
   document.getElementById('nw-svc-custom').style.display='none';
   document.getElementById('nw-svc-custom').value='';
   document.getElementById('nw-price').value='';
+  ['nw-venta','nw-extra','nw-gastos'].forEach(id=>{ document.getElementById(id).value=''; });
   document.getElementById('nw-date-single').value=routeDate||TODAY_KEY;
   const nwAdd=document.getElementById('nw-date-add'); if(nwAdd) nwAdd.value='';
   const nwFrom=document.getElementById('nw-date-from'); if(nwFrom) nwFrom.value=routeDate||TODAY_KEY;
@@ -3940,7 +3966,13 @@ function saveWork(){
   }
 
   dates.sort();
-  dates.forEach(d=>{
+  // Venta de artículos, trabajo extra y gastos: lo que no se carga queda en 0.
+  // Si la tarea se crea para varias fechas, se cargan solo en la primera
+  // (para no repetir una venta o un gasto en cada visita).
+  const _nv=id=>{ const n=parseFloat(String(document.getElementById(id).value).replace(',','.')); return n>0?n:null; };
+  const _cierre0={ ventaProductos:_nv('nw-venta'), trabajoExtra:_nv('nw-extra'), gastos:_nv('nw-gastos') };
+  const _tieneCierre=Object.values(_cierre0).some(v=>v!=null);
+  dates.forEach((d,_di)=>{
     if(!schedule[d])schedule[d]=[];
     // _lid: identificador local temporal — permite detectar si el usuario
     // borra esta tarea MIENTRAS todavía se está subiendo a Supabase (ver
@@ -3948,7 +3980,8 @@ function saveWork(){
     // creada muy rápido no alcanzaba a cancelar la subida en curso, y la
     // tarea "fantasma" quedaba viva en la nube y volvía a aparecer sola.
     schedule[d].push({clientId,time:start,endTime:end,notes,status:'pend',recurrenceId,
-      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid})), _lid:_nextJobLid++, price});
+      assignVal, assignLabel, asignaciones: assignUserIds.map(uid=>({user_id:uid})), _lid:_nextJobLid++, price,
+      cierre:(_di===0&&_tieneCierre)?Object.assign({},_cierre0):undefined});
   });
 
   // refresh everything that depends on schedule
@@ -4248,17 +4281,17 @@ function infRows(from,to){
       const cl=getClientById(e.clientId);
       if(!cl||cl.deleted) return;
       const tipo=infTipo(e,cl), ci=e.cierre||{};
-      const price=(e.price??cl.price??0), venta=ci.ventaProductos||0;
+      const price=(e.price??cl.price??0), venta=ci.ventaProductos||0, extra=ci.trabajoExtra||0;
       const ac=(e.acidoLitros!=null)?e.acidoLitros:null;
       const acidoCosto=(ac||0)*INF.acido;
       const moDef={limpieza:INF.moLimpieza,mant:INF.moMant,bomba:INF.moBomba,filtro:INF.moFiltro}[tipo]||0;
       const mo=(ci.manoObra!=null)?ci.manoObra:moDef;
-      const arena=ci.costoArena||0;
+      const gastos=(ci.gastos!=null?ci.gastos:ci.costoArena)||0; // costoArena = nombre viejo del mismo dato
       const costoProd=venta*INF.costoProd/100, iva=venta*INF.iva/100;
-      const cobro=price+venta, costo=acidoCosto+mo+arena+costoProd+iva, margen=cobro-costo;
+      const cobro=price+venta+extra, costo=acidoCosto+mo+gastos+costoProd+iva, margen=cobro-costo;
       const p=cl.pileta||{};
       const m2=(+p.largo>0&&+p.ancho>0)?(+p.largo)*(+p.ancho):null;
-      rows.push({k,idx,cl,e,tipo,price,venta,cobro,ac,acidoCosto,mo,arena,arenaPend:!!ci.arenaPendiente,costoProd,iva,costo,margen,
+      rows.push({k,idx,cl,e,tipo,price,venta,extra,cobro,ac,acidoCosto,mo,gastos,costoProd,iva,costo,margen,
         pct:cobro>0?margen/cobro*100:0,horas:(e.duracionMin!=null)?e.duracionMin/60:null,m2,mat:infMatLabel(p),matBase:p.material||null,pintada:!!p.pintada});
     });
   });
@@ -4292,25 +4325,23 @@ function infLecturas(rows,mat){
   // 4) Mantenimiento
   const mant=rows.filter(r=>r.tipo==='mant');
   if(mant.length&&mant.length<rows.length){
-    const ing=infSum(mant,r=>r.price), mg=infSum(mant,r=>r.price-r.acidoCosto-r.mo-r.arena);
+    const ing=infSum(mant,r=>r.price), mg=infSum(mant,r=>r.price-r.acidoCosto-r.mo-r.gastos);
     out.push('<b>Mantenimiento:</b> deja '+infPct(mg,ing)+'% de margen, pero son solo '+mant.length+' de los '+rows.length+' registros.');
   }
   // 5) Reventa
   const rv=rows.filter(r=>r.venta>0);
   if(rv.length){
     const v=infSum(rv,r=>r.venta), m=infSum(rv,r=>r.venta-r.costoProd-r.iva);
-    out.push('<b>Reventa de productos:</b> '+rv.length+' venta'+(rv.length>1?'s':'')+' por '+infF(v)+', con '+infPct(m,v)+'% de margen. Baja el % de los trabajos donde se vendió.');
+    out.push('<b>Venta de artículos:</b> '+rv.length+' venta'+(rv.length>1?'s':'')+' por '+infF(v)+', con '+infPct(m,v)+'% de margen. Baja el % de los trabajos donde se vendió.');
   }
   // 6) Datos que faltan
   const sinAc=rows.filter(r=>r.tipo==='limpieza'&&r.ac==null).length;
   const sinT=rows.filter(r=>r.horas==null).length;
   const sinM=rows.filter(r=>r.tipo==='limpieza'&&!(r.m2&&r.mat)).length;
-  const pend=rows.filter(r=>r.arenaPend).length;
   const falt=[];
   if(sinAc) falt.push(sinAc+' limpieza'+(sinAc>1?'s':'')+' sin ácido');
   if(sinT) falt.push(sinT+' trabajo'+(sinT>1?'s':'')+' sin tiempo');
   if(sinM) falt.push(sinM+' limpieza'+(sinM>1?'s':'')+' sin medidas o material del cliente');
-  if(pend) falt.push(pend+' con cambio de arena sin costo (†, el margen de esos trabajos está inflado)');
   if(falt.length) out.push('<b>Faltan datos:</b> '+falt.join(', ')+'. Tocá un trabajo de la tabla para completarlo y el informe se actualiza solo.');
   return out;
 }
@@ -4329,16 +4360,19 @@ function renderInforme(){
   h+='<div class="inf-sec">Ingreso y margen por tipo de servicio</div><div class="inf-card">';
   ['limpieza','mant','bomba','filtro'].forEach(t=>{
     const rs=rows.filter(r=>r.tipo===t); if(!rs.length) return;
-    const i=infSum(rs,r=>r.price), c=infSum(rs,r=>r.acidoCosto+r.mo+r.arena), m=i-c;
+    const i=infSum(rs,r=>r.price), c=infSum(rs,r=>r.acidoCosto+r.mo+r.gastos), m=i-c;
     h+='<div class="inf-row"><b>'+INF_TIPOS[t]+' ('+rs.length+')</b><br>'+infF(i)+' → margen '+infF(m)+' ('+infPct(m,i)+'%)<div class="inf-bar"><i style="width:'+Math.max(0,Math.min(100,infPct(m,i)))+'%;background:var(--green)"></i></div></div>';
   });
   const rv=rows.filter(r=>r.venta>0);
   if(rv.length){ const v=infSum(rv,r=>r.venta), m=infSum(rv,r=>r.venta-r.costoProd-r.iva);
-    h+='<div class="inf-row"><b>Reventa de productos ('+rv.length+' venta'+(rv.length>1?'s':'')+')</b><br>'+infF(v)+' → margen '+infF(m)+' ('+infPct(m,v)+'%)<div class="inf-bar"><i style="width:'+infPct(m,v)+'%;background:var(--green)"></i></div></div>'; }
+    h+='<div class="inf-row"><b>Venta de artículos ('+rv.length+' venta'+(rv.length>1?'s':'')+')</b><br>'+infF(v)+' → margen '+infF(m)+' ('+infPct(m,v)+'%)<div class="inf-bar"><i style="width:'+infPct(m,v)+'%;background:var(--green)"></i></div></div>'; }
+  const ex=rows.filter(r=>r.extra>0);
+  if(ex.length){ const v=infSum(ex,r=>r.extra);
+    h+='<div class="inf-row"><b>Trabajo extra ('+ex.length+' trabajo'+(ex.length>1?'s':'')+')</b><br>'+infF(v)+' cobrados de más<div class="inf-bar"><i style="width:100%;background:var(--green)"></i></div></div>'; }
   h+='</div>';
 
   // Dónde se fue la plata
-  const cs=[['Mano de obra',infSum(rows,r=>r.mo),'#F5A623'],['Ácido',infSum(rows,r=>r.acidoCosto),'#F25C5C'],['Arena filtro',infSum(rows,r=>r.arena),'#7BBDE8'],['Costo productos',infSum(rows,r=>r.costoProd),'#4ED8A0'],['IVA productos',infSum(rows,r=>r.iva),'#9AA7B2']].filter(x=>x[1]>0);
+  const cs=[['Mano de obra',infSum(rows,r=>r.mo),'#F5A623'],['Ácido',infSum(rows,r=>r.acidoCosto),'#F25C5C'],['Gastos del trabajo',infSum(rows,r=>r.gastos),'#7BBDE8'],['Costo productos',infSum(rows,r=>r.costoProd),'#4ED8A0'],['IVA productos',infSum(rows,r=>r.iva),'#9AA7B2']].filter(x=>x[1]>0);
   h+='<div class="inf-sec">Dónde se fue la plata (costos '+infF(cost)+')</div><div class="inf-card">'+cs.map(x=>'<div class="inf-row"><b>'+x[0]+'</b> '+infF(x[1])+' <span style="color:var(--text3)">('+infPct(x[1],cost)+'%)</span><div class="inf-bar"><i style="width:'+infPct(x[1],cost)+'%;background:'+x[2]+'"></i></div></div>').join('')+'</div>';
 
   // Ácido por m² según material y estado (solo limpiezas con ácido y medidas)
@@ -4360,14 +4394,14 @@ function renderInforme(){
   // Todos los registros, del peor al mejor margen
   const ord=[...rows].sort((a,b)=>a.pct-b.pct);
   h+='<div class="inf-sec">Los '+rows.length+' registros, de peor a mejor margen</div><div class="inf-card"><div class="inf-scroll"><table class="inf-t"><tr><th>Cliente</th><th>Tipo</th><th>Material</th><th class="n">m²</th><th class="n">Cobro</th><th class="n">Margen</th><th class="n">%</th></tr>'+
-    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+(r.arenaPend?' †':'')+'</td><td>'+INF_CORTO[r.tipo]+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
-    '<div class="inf-note" style="padding:6px 0 0">El % es el margen sobre lo cobrado e incluye la reventa de productos. Tocá un trabajo para editar sus datos.</div></div>';
+    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+'</td><td>'+INF_CORTO[r.tipo]+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
+    '<div class="inf-note" style="padding:6px 0 0">El % es el margen sobre lo cobrado: valor del trabajo, venta de artículos y trabajo extra. Tocá un trabajo para editar sus datos.</div></div>';
 
   // Lecturas rápidas
   const lec=infLecturas(rows,mat);
   if(lec.length) h+='<div class="inf-sec">Lecturas rápidas</div><div class="inf-card">'+lec.map(t=>'<div class="inf-read">'+t+'</div>').join('')+'</div>';
 
-  h+='<div class="inf-note" style="padding-top:12px">Calculado con los trabajos completados · ácido '+infF(INF.acido)+'/L · mano de obra '+infF(INF.moLimpieza)+' limpieza / '+infF(INF.moMant)+' mantenimiento · reventa de productos: '+INF.costoProd+'% costo + '+INF.iva+'% IVA.</div>';
+  h+='<div class="inf-note" style="padding-top:12px">Calculado con los trabajos completados · ácido '+infF(INF.acido)+'/L · mano de obra '+infF(INF.moLimpieza)+' limpieza / '+infF(INF.moMant)+' mantenimiento · venta de artículos: '+INF.costoProd+'% costo + '+INF.iva+'% IVA.</div>';
   box.innerHTML=h;
 }
 
@@ -4416,7 +4450,7 @@ function renderFinanzas(){
   Object.keys(schedule).filter(k=>k>=from&&k<=to).forEach(k=>{
     (schedule[k]||[]).filter(e=>e.status==='done').forEach(e=>{
       const cl = getClientById(e.clientId);
-      if(cl && !cl.deleted){ scheduleIncome += (e.price??cl.price??0); scheduleJobs++; }
+      if(cl && !cl.deleted){ scheduleIncome += jobIncome(e,cl); scheduleJobs++; }
     });
   });
 
@@ -4448,7 +4482,7 @@ function renderFinanzas(){
       (schedule[k]||[]).forEach(e=>{
         const cl=getClientById(e.clientId);
         if(!cl||cl.deleted) return;
-        const amt=(e.price??cl.price??0);
+        const amt=jobIncome(e,cl);
         if(e.status==='done'){doneAmt+=amt;doneN++;} else {pendAmt+=amt;pendN++;}
       });
     });
@@ -4469,7 +4503,7 @@ function renderFinanzas(){
       const svc = cl.service || 'Sin categoría';
       if(!bySvc[svc]) bySvc[svc] = {count:0,total:0};
       bySvc[svc].count++;
-      bySvc[svc].total += (e.price??cl.price??0);
+      bySvc[svc].total += jobIncome(e,cl);
     });
   });
   const svcEl = document.getElementById('fin-by-service');
@@ -5612,7 +5646,7 @@ function renderDashboardPaint(){
     const kd = new Date(y,m-1,d);
     const jobs = (schedule[k]||[]).filter(e=>!getClientById(e.clientId)?.deleted);
     // Solo trabajos completados cuentan como ingreso (igual que en Finanzas)
-    const income = jobs.filter(e=>e.status==='done').reduce((a,e)=>(e.price??getClientById(e.clientId)?.price??0)+a, 0);
+    const income = jobs.filter(e=>e.status==='done').reduce((a,e)=>jobIncome(e,getClientById(e.clientId))+a, 0);
     if(kd>=weekStart && kd<=weekEnd){  weekIncome+=income; weekJobs+=jobs.length; }
     if(kd>=monthStart && kd<=monthEnd){ monthIncome+=income; monthJobs+=jobs.length; }
   });
@@ -6790,7 +6824,7 @@ function exportAgendaWhatsApp(){
     if(validCoord(cl.lat,cl.lng)) msg+='🗺 https://maps.google.com/?q='+cl.lat+','+cl.lng+'\n';
     msg+='\n';
   });
-  const total=jobs.reduce((a,j)=>a+(j.price??j.client.price??0),0);
+  const total=jobs.reduce((a,j)=>a+jobIncome(j,j.client),0);
   msg+='─────────────────\n💰 Total: $'+total.toLocaleString('es-AR')+'\n📊 '+jobs.length+' paradas';
   if(navigator.share){
     navigator.share({title:'Agenda Clean Pools SJ',text:msg}).catch(()=>window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank'));
@@ -7674,11 +7708,29 @@ function exportToGoogleCalendar(dateKey){
 <div class="modal-overlay" id="modal-detlimp" onclick="if(event.target===this)closeModal('detlimp')">
   <div class="modal-box">
     <div class="mhandle"></div>
-    <div class="mtitle">Detalle del trabajo</div>
+    <div class="mtitle">Valores y datos del trabajo</div>
     <div class="mfield">
       <div class="mlabel">Cliente</div>
       <input class="minput" id="dl-name" type="text" disabled>
     </div>
+    <div class="mlabel" style="margin:6px 0 6px;color:var(--c6)">💰 Valores del trabajo (lo que no cargues queda en $0)</div>
+    <div class="mfield">
+      <div class="mlabel">Valor del trabajo ($)</div>
+      <input class="minput" id="dl-valor" type="number" min="0" inputmode="numeric" placeholder="Ej: 25000">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Venta de artículos ($) — lo que se le cobró al cliente</div>
+      <input class="minput" id="dl-prod" type="number" min="0" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Trabajo extra ($) — lo que se cobró de más</div>
+      <input class="minput" id="dl-extra" type="number" min="0" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="mfield">
+      <div class="mlabel">Gastos del trabajo ($) — arena, lijas, materiales (sin combustible)</div>
+      <input class="minput" id="dl-gastos" type="number" min="0" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="mlabel" style="margin:12px 0 6px;color:var(--c6)">🧪 Datos del trabajo</div>
     <div class="mfield">
       <div class="mlabel">Ácido usado (litros)</div>
       <input class="minput" id="dl-acido" type="number" step="0.1" placeholder="Ej: 2.5">
@@ -7696,9 +7748,8 @@ function exportToGoogleCalendar(dateKey){
         <div class="dif-pill" data-v="dificil" onclick="setDificultad('dificil')">🔴 Difícil</div>
       </div>
     </div>
-    <div class="mlabel" style="margin:12px 0 6px;color:var(--c6)">Para el informe de cierre</div>
     <div class="mfield">
-      <div class="mlabel">Tipo de trabajo</div>
+      <div class="mlabel">Tipo de trabajo (para el informe)</div>
       <select class="minput" id="dl-tipo">
         <option value="">Automático (según el cliente)</option>
         <option value="limpieza">Limpieza profunda / total</option>
@@ -7710,15 +7761,6 @@ function exportToGoogleCalendar(dateKey){
     <div class="mfield">
       <div class="mlabel">Mano de obra ($) — vacío = tarifa del informe</div>
       <input class="minput" id="dl-mo" type="number" min="0" inputmode="numeric" placeholder="Ej: 15000 (0 si lo hiciste vos sin sueldo)">
-    </div>
-    <div class="mfield">
-      <div class="mlabel">Costo de la arena ($)</div>
-      <input class="minput" id="dl-arena" type="number" min="0" inputmode="numeric" placeholder="Solo si se cambió arena">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-top:6px"><input type="checkbox" id="dl-arena-pend" style="margin:0">Se cambió arena, falta cargar el costo</label>
-    </div>
-    <div class="mfield">
-      <div class="mlabel">Venta de productos ($) — lo que se le cobró al cliente</div>
-      <input class="minput" id="dl-prod" type="number" min="0" inputmode="numeric" placeholder="Ej: 12500">
     </div>
     <div class="mactions">
       <div class="bcancel" onclick="closeModal('detlimp')">Cancelar</div>
