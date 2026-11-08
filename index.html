@@ -3463,7 +3463,8 @@ function saveDetalleLimpieza(){
   // acido_litros / duracion_min en trabajos) si el trabajo ya está
   // sincronizado.
   if(e.supabase_id){
-    saveTrabajoToSupabase(e, dateKey).catch(err=>{
+    _detalleDirty.add(e.supabase_id);
+    saveTrabajoToSupabase(e, dateKey).then(()=>{ _detalleDirty.delete(e.supabase_id); }).catch(err=>{
       console.warn('[SB] sync detalle limpieza:',err);
       toast('⚠ Se guardó acá, pero no se pudo subir a la nube todavía');
     });
@@ -6205,6 +6206,9 @@ const _borrandoAhora = new Set();
 // ver saveWork()) + set de _lid marcados para borrar en cuanto terminen de
 // subirse a Supabase.
 let _nextJobLid = 1;
+// Trabajos cuyo detalle (tipo, ácido, tiempo, costos) se editó acá y todavía no se confirmó en la nube:
+// mientras estén en este set, una recarga desde Supabase NO debe pisar lo local con datos viejos.
+const _detalleDirty = new Set();
 const _pendingDeleteLid = new Set();
 
 function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
@@ -6244,11 +6248,11 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
-      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
-      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
-      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id)),
-      cierre:(t.cierre!=null?t.cierre:cierreLocal.get(t.id))});
+      price:((_detalleDirty.has(t.id)&&preciosLocales.has(t.id))?preciosLocales.get(t.id):(t.precio!=null?t.precio:preciosLocales.get(t.id))),
+      acidoLitros:((_detalleDirty.has(t.id)&&acidoLocal.has(t.id))?acidoLocal.get(t.id):(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id))),
+      duracionMin:((_detalleDirty.has(t.id)&&duracionLocal.has(t.id))?duracionLocal.get(t.id):(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))),
+      dificultad:((_detalleDirty.has(t.id)&&dificultadLocal.has(t.id))?dificultadLocal.get(t.id):(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))),
+      cierre:((_detalleDirty.has(t.id)&&cierreLocal.has(t.id))?cierreLocal.get(t.id):(t.cierre!=null?t.cierre:cierreLocal.get(t.id)))});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -6321,11 +6325,11 @@ async function syncTrabajosForDate(dateKey){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
-      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
-      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
-      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id)),
-      cierre:(t.cierre!=null?t.cierre:cierreLocal.get(t.id))});
+      price:((_detalleDirty.has(t.id)&&preciosLocales.has(t.id))?preciosLocales.get(t.id):(t.precio!=null?t.precio:preciosLocales.get(t.id))),
+      acidoLitros:((_detalleDirty.has(t.id)&&acidoLocal.has(t.id))?acidoLocal.get(t.id):(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id))),
+      duracionMin:((_detalleDirty.has(t.id)&&duracionLocal.has(t.id))?duracionLocal.get(t.id):(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))),
+      dificultad:((_detalleDirty.has(t.id)&&dificultadLocal.has(t.id))?dificultadLocal.get(t.id):(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))),
+      cierre:((_detalleDirty.has(t.id)&&cierreLocal.has(t.id))?cierreLocal.get(t.id):(t.cierre!=null?t.cierre:cierreLocal.get(t.id)))});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
@@ -6477,7 +6481,7 @@ async function saveTrabajoToSupabase(job,dateKey){
     // 'dificultad' y 'cierre' son columnas opcionales: si todavía no existen en
     // Supabase, se reintenta sin ellas para no romper el guardado del resto.
     if(job.dificultad!=null && !window._noColDificultad) p.dificultad=job.dificultad;
-    if(job.cierre!=null && !window._noColCierre) p.cierre=job.cierre;
+    if(job.cierre!==undefined && !window._noColCierre) p.cierre=job.cierre;
     const _colFaltante = er => {
       const t=((er&&er.message)||'')+((er&&er.details)||'');
       if(p.dificultad!==undefined && /dificultad/i.test(t)){ window._noColDificultad=true; delete p.dificultad; return true; }
