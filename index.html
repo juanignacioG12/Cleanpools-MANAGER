@@ -343,6 +343,8 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .mfield{margin-bottom:12px}
 .dif-pills{display:flex;gap:8px}
 .dif-pill{flex:1;text-align:center;padding:10px 6px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card);color:var(--c6);font-size:13px;font-weight:700;cursor:pointer}
+.tipo-pills{display:flex;flex-wrap:wrap;gap:8px}
+.tipo-pills .dif-pill{flex:1 1 45%;font-size:12.5px}
 .dif-pill.on{border-color:var(--c6);background:rgba(123,189,232,.22);color:var(--text);box-shadow:0 0 0 1px var(--c6)}
 .mlabel{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text3);text-transform:uppercase;margin-bottom:5px}
 .minput{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none}
@@ -3400,6 +3402,18 @@ function setDificultad(v){
   h.value = (h.value===v && v) ? '' : v; // tocar de nuevo deselecciona
   document.querySelectorAll('#dl-dif-pills .dif-pill').forEach(el=>el.classList.toggle('on',el.dataset.v===h.value));
 }
+const TIPOS_ORDEN=['limpieza','mant','bomba','filtro'];
+function getTiposSel(){ const v=document.getElementById('dl-tipo').value; return v?v.split(',').filter(Boolean):[]; }
+function setTiposSel(arr){
+  const a=TIPOS_ORDEN.filter(t=>(arr||[]).includes(t));
+  document.getElementById('dl-tipo').value=a.join(',');
+  document.querySelectorAll('#dl-tipo-pills .dif-pill').forEach(el=>el.classList.toggle('on',a.includes(el.dataset.v)));
+}
+function toggleTipoTrabajo(t){
+  const a=getTiposSel(); const i=a.indexOf(t);
+  if(i>=0) a.splice(i,1); else a.push(t);
+  setTiposSel(a);
+}
 function asEditDetalleLimpieza(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
@@ -3414,7 +3428,7 @@ function asEditDetalleLimpieza(){
   setv('dl-prod',ci.ventaProductos);
   setv('dl-extra',ci.trabajoExtra);
   setv('dl-gastos',(ci.gastos!=null?ci.gastos:ci.costoArena)); // costoArena = nombre viejo del mismo dato
-  document.getElementById('dl-tipo').value=ci.tipo||'';
+  setTiposSel(infTiposDe(e,c)); // lo guardado; si no hay nada, el tipo habitual del cliente (queda a la vista y editable)
   document.getElementById('dl-mo').value=ci.manoObra!=null?ci.manoObra:'';
   closeModal('actions');
   openModal('detlimp');
@@ -3435,7 +3449,8 @@ function saveDetalleLimpieza(){
   const nz=v=>(v&&v>0)?v:null;
   const valor=num('dl-valor');
   if(valor!=null && valor!==(e.price??getClientById(e.clientId)?.price)) e.price=valor;
-  const ci={ tipo:document.getElementById('dl-tipo').value||null, manoObra:num('dl-mo'),
+  const tiposSel=getTiposSel();
+  const ci={ tipos:tiposSel.length?tiposSel:null, tipo:tiposSel[0]||null, manoObra:num('dl-mo'),
              gastos:nz(num('dl-gastos')), trabajoExtra:nz(num('dl-extra')), ventaProductos:nz(num('dl-prod')) };
   e.cierre = Object.values(ci).some(v=>v!=null) ? ci : null;
   dbSave();
@@ -4262,13 +4277,21 @@ const infN=(v,d=1)=>(Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toLocaleString
 const infPct=(a,b)=>b>0?Math.round(a/b*100):0;
 
 function infTipo(e,cl){
-  const t=e.cierre&&e.cierre.tipo; if(t) return t;
-  const s=cl.service||'';
+  const s=(cl&&cl.service)||'';
   if(/limpieza/i.test(s)) return 'limpieza';
   if(/filtr/i.test(s)) return 'filtro';
   if(/bomba/i.test(s)) return 'bomba';
   return 'mant';
 }
+// Trabajos realizados en la visita (uno o varios). Prioridad: lo cargado en el
+// detalle del trabajo; solo si no se cargó nada se usa el tipo habitual del cliente.
+function infTiposDe(e,cl){
+  const ci=(e&&e.cierre)||{};
+  let a=Array.isArray(ci.tipos)?ci.tipos.slice():(ci.tipo?[ci.tipo]:[]);
+  a=TIPOS_ORDEN.filter(t=>a.includes(t));
+  return a.length?a:[infTipo(e,cl)];
+}
+const infTiposLabel=(tipos,corto)=>tipos.map(t=>(corto?INF_CORTO:INF_TIPOS)[t]).join(' + ');
 function infMatLabel(p){
   if(!p||!p.material) return null;
   return p.material+(p.pintada?' '+(INF_PINT[p.material]||'pintado'):'');
@@ -4280,18 +4303,19 @@ function infRows(from,to){
       if(e.status!=='done') return;
       const cl=getClientById(e.clientId);
       if(!cl||cl.deleted) return;
-      const tipo=infTipo(e,cl), ci=e.cierre||{};
+      const tipos=infTiposDe(e,cl), tipo=tipos[0], ci=e.cierre||{};
       const price=(e.price??cl.price??0), venta=ci.ventaProductos||0, extra=ci.trabajoExtra||0;
       const ac=(e.acidoLitros!=null)?e.acidoLitros:null;
       const acidoCosto=(ac||0)*INF.acido;
-      const moDef={limpieza:INF.moLimpieza,mant:INF.moMant,bomba:INF.moBomba,filtro:INF.moFiltro}[tipo]||0;
+      const moMap={limpieza:INF.moLimpieza,mant:INF.moMant,bomba:INF.moBomba,filtro:INF.moFiltro};
+      const moDef=tipos.reduce((a,t)=>a+(moMap[t]||0),0); // suma la mano de obra de cada trabajo marcado
       const mo=(ci.manoObra!=null)?ci.manoObra:moDef;
       const gastos=(ci.gastos!=null?ci.gastos:ci.costoArena)||0; // costoArena = nombre viejo del mismo dato
       const costoProd=venta*INF.costoProd/100, iva=venta*INF.iva/100;
       const cobro=price+venta+extra, costo=acidoCosto+mo+gastos+costoProd+iva, margen=cobro-costo;
       const p=cl.pileta||{};
       const m2=(+p.largo>0&&+p.ancho>0)?(+p.largo)*(+p.ancho):null;
-      rows.push({k,idx,cl,e,tipo,price,venta,extra,cobro,ac,acidoCosto,mo,gastos,costoProd,iva,costo,margen,
+      rows.push({k,idx,cl,e,tipo,tipos,tipoKey:tipos.join('+'),tipoLbl:infTiposLabel(tipos),tipoCorto:infTiposLabel(tipos,true),price,venta,extra,cobro,ac,acidoCosto,mo,gastos,costoProd,iva,costo,margen,
         pct:cobro>0?margen/cobro*100:0,horas:(e.duracionMin!=null)?e.duracionMin/60:null,m2,mat:infMatLabel(p),matBase:p.material||null,pintada:!!p.pintada});
     });
   });
@@ -4302,12 +4326,12 @@ const infSum=(arr,f)=>arr.reduce((a,r)=>a+f(r),0);
 function infLecturas(rows,mat){
   const out=[]; const nombre=r=>esc(r.cl.n);
   // 1) Trabajo más flojo
-  const cand=rows.filter(r=>r.tipo!=='filtro'&&r.cobro>0);
+  const cand=rows.filter(r=>!(r.tipos.length===1&&r.tipos[0]==='filtro')&&r.cobro>0);
   if(cand.length>=2){
     const w=cand.reduce((a,b)=>b.pct<a.pct?b:a);
     const det=[w.mat?'pileta de '+esc(w.mat):'', w.m2?infN(w.m2,0)+' m²':''].filter(Boolean).join(' de ');
     const ac=(w.ac!=null)?' que usó '+infN(w.ac)+' L de ácido'+(w.m2?' ('+infN(w.ac/w.m2,2)+' L/m²)':''):'';
-    out.push('<b>El trabajo más flojo es '+INF_CORTO[w.tipo].toLowerCase()+' de '+nombre(w)+':</b> '+(det?det+',':'')+ac+' y dejó '+infF(w.margen)+' de margen ('+Math.round(w.pct)+'%). Para tener '+INF.margen+'% habría que cobrar unos '+infF(w.costo/(1-INF.margen/100))+'.');
+    out.push('<b>El trabajo más flojo es '+w.tipoCorto.toLowerCase()+' de '+nombre(w)+':</b> '+(det?det+',':'')+ac+' y dejó '+infF(w.margen)+' de margen ('+Math.round(w.pct)+'%). Para tener '+INF.margen+'% habría que cobrar unos '+infF(w.costo/(1-INF.margen/100))+'.');
   }
   // 2) Pintadas vs lisas
   let mejor=null;
@@ -4323,7 +4347,7 @@ function infLecturas(rows,mat){
     if(lg.horas>=hProm*1.8&&mh<mhProm) out.push('<b>'+nombre(lg)+', caso raro:</b> '+infN(lg.horas)+' horas de trabajo. Con '+infF(lg.cobro)+' rindió unos '+infF(mh)+' de margen por hora, contra unos '+infF(mhProm)+' de promedio. Los trabajos largos o de piletas abandonadas conviene cobrarlos aparte.');
   }
   // 4) Mantenimiento
-  const mant=rows.filter(r=>r.tipo==='mant');
+  const mant=rows.filter(r=>r.tipos.length===1&&r.tipos[0]==='mant');
   if(mant.length&&mant.length<rows.length){
     const ing=infSum(mant,r=>r.price), mg=infSum(mant,r=>r.price-r.acidoCosto-r.mo-r.gastos);
     out.push('<b>Mantenimiento:</b> deja '+infPct(mg,ing)+'% de margen, pero son solo '+mant.length+' de los '+rows.length+' registros.');
@@ -4335,9 +4359,9 @@ function infLecturas(rows,mat){
     out.push('<b>Venta de artículos:</b> '+rv.length+' venta'+(rv.length>1?'s':'')+' por '+infF(v)+', con '+infPct(m,v)+'% de margen. Baja el % de los trabajos donde se vendió.');
   }
   // 6) Datos que faltan
-  const sinAc=rows.filter(r=>r.tipo==='limpieza'&&r.ac==null).length;
+  const sinAc=rows.filter(r=>r.tipos.includes('limpieza')&&r.ac==null).length;
   const sinT=rows.filter(r=>r.horas==null).length;
-  const sinM=rows.filter(r=>r.tipo==='limpieza'&&!(r.m2&&r.mat)).length;
+  const sinM=rows.filter(r=>r.tipos.includes('limpieza')&&!(r.m2&&r.mat)).length;
   const falt=[];
   if(sinAc) falt.push(sinAc+' limpieza'+(sinAc>1?'s':'')+' sin ácido');
   if(sinT) falt.push(sinT+' trabajo'+(sinT>1?'s':'')+' sin tiempo');
@@ -4358,10 +4382,11 @@ function renderInforme(){
 
   // Ingreso y margen por tipo de servicio
   h+='<div class="inf-sec">Ingreso y margen por tipo de servicio</div><div class="inf-card">';
-  ['limpieza','mant','bomba','filtro'].forEach(t=>{
-    const rs=rows.filter(r=>r.tipo===t); if(!rs.length) return;
+  const claves=[]; rows.forEach(r=>{ if(!claves.includes(r.tipoKey)) claves.push(r.tipoKey); });
+  claves.sort((a,b)=>a.split('+').length-b.split('+').length || a.localeCompare(b)).forEach(t=>{
+    const rs=rows.filter(r=>r.tipoKey===t); if(!rs.length) return;
     const i=infSum(rs,r=>r.price), c=infSum(rs,r=>r.acidoCosto+r.mo+r.gastos), m=i-c;
-    h+='<div class="inf-row"><b>'+INF_TIPOS[t]+' ('+rs.length+')</b><br>'+infF(i)+' → margen '+infF(m)+' ('+infPct(m,i)+'%)<div class="inf-bar"><i style="width:'+Math.max(0,Math.min(100,infPct(m,i)))+'%;background:var(--green)"></i></div></div>';
+    h+='<div class="inf-row"><b>'+rs[0].tipoLbl+' ('+rs.length+')</b><br>'+infF(i)+' → margen '+infF(m)+' ('+infPct(m,i)+'%)<div class="inf-bar"><i style="width:'+Math.max(0,Math.min(100,infPct(m,i)))+'%;background:var(--green)"></i></div></div>';
   });
   const rv=rows.filter(r=>r.venta>0);
   if(rv.length){ const v=infSum(rv,r=>r.venta), m=infSum(rv,r=>r.venta-r.costoProd-r.iva);
@@ -4377,7 +4402,7 @@ function renderInforme(){
 
   // Ácido por m² según material y estado (solo limpiezas con ácido y medidas)
   const grupos={};
-  rows.filter(r=>r.tipo==='limpieza'&&r.ac!=null&&r.m2&&r.mat).forEach(r=>{
+  rows.filter(r=>r.tipos.includes('limpieza')&&r.ac!=null&&r.m2&&r.mat).forEach(r=>{
     const g=grupos[r.mat]||(grupos[r.mat]={label:r.mat,base:r.matBase,pintada:r.pintada,n:0,m2:0,ac:0}); g.n++; g.m2+=r.m2; g.ac+=r.ac; });
   const mat=Object.values(grupos).map(g=>Object.assign(g,{lm2:g.m2>0?g.ac/g.m2:0})).sort((a,b)=>b.n-a.n);
   if(mat.length){
@@ -4394,7 +4419,7 @@ function renderInforme(){
   // Todos los registros, del peor al mejor margen
   const ord=[...rows].sort((a,b)=>a.pct-b.pct);
   h+='<div class="inf-sec">Los '+rows.length+' registros, de peor a mejor margen</div><div class="inf-card"><div class="inf-scroll"><table class="inf-t"><tr><th>Cliente</th><th>Tipo</th><th>Material</th><th class="n">m²</th><th class="n">Cobro</th><th class="n">Margen</th><th class="n">%</th></tr>'+
-    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+'</td><td>'+INF_CORTO[r.tipo]+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
+    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+'</td><td>'+r.tipoCorto+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
     '<div class="inf-note" style="padding:6px 0 0">El % es el margen sobre lo cobrado: valor del trabajo, venta de artículos y trabajo extra. Tocá un trabajo para editar sus datos.</div></div>';
 
   // Lecturas rápidas
@@ -7749,14 +7774,15 @@ function exportToGoogleCalendar(dateKey){
       </div>
     </div>
     <div class="mfield">
-      <div class="mlabel">Tipo de trabajo (para el informe)</div>
-      <select class="minput" id="dl-tipo">
-        <option value="">Automático (según el cliente)</option>
-        <option value="limpieza">Limpieza profunda / total</option>
-        <option value="mant">Mantenimiento</option>
-        <option value="bomba">Arreglo de bomba</option>
-        <option value="filtro">Cambio de carga filtrante</option>
-      </select>
+      <div class="mlabel">Trabajos realizados (podés marcar varios — se suman)</div>
+      <input type="hidden" id="dl-tipo" value="">
+      <div class="dif-pills tipo-pills" id="dl-tipo-pills">
+        <div class="dif-pill" data-v="limpieza" onclick="toggleTipoTrabajo('limpieza')">Limpieza profunda / total</div>
+        <div class="dif-pill" data-v="mant" onclick="toggleTipoTrabajo('mant')">Mantenimiento</div>
+        <div class="dif-pill" data-v="bomba" onclick="toggleTipoTrabajo('bomba')">Arreglo de bomba</div>
+        <div class="dif-pill" data-v="filtro" onclick="toggleTipoTrabajo('filtro')">Cambio de carga filtrante</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">El informe usa exactamente los trabajos marcados acá (no el tipo habitual del cliente) y suma la mano de obra de cada uno.</div>
     </div>
     <div class="mfield">
       <div class="mlabel">Mano de obra ($) — vacío = tarifa del informe</div>
