@@ -2265,6 +2265,26 @@ function jobsFor(dateKey){
   return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:getClientById(e.clientId)}))
     .filter(j=>j.client && !j.client.deleted);
 }
+// Etiqueta del servicio de UNA visita: los trabajos cargados en el detalle (uno o varios);
+// si no se cargó ninguno, el servicio habitual del cliente.
+function jobSvcLabel(j,c){
+  const ci=j&&j.cierre;
+  const a=ci&&(Array.isArray(ci.tipos)&&ci.tipos.length?ci.tipos:(ci.tipo?[ci.tipo]:null));
+  if(!a) return c.service;
+  const N={limpieza:'Limpieza profunda / total',mant:'Mantenimiento',bomba:'Arreglo de bomba',filtro:'Cambio de carga filtrante'};
+  const l=['limpieza','mant','bomba','filtro'].filter(t=>a.includes(t)).map(t=>N[t]).join(' + ');
+  return l||c.service;
+}
+// Repinta TODO lo que muestra datos de un trabajo: lista de hoy y métricas, calendario/agenda
+// del Dashboard, Agenda, Ruta, Finanzas e Informe.
+function refreshJobViews(){
+  try{ renderToday(); }catch(e){}
+  try{ if(document.getElementById('cal-inline')?.classList.contains('open') && selectedDate) renderAgendaListPaint(selectedDate); }catch(e){}
+  try{ if(document.getElementById('pg-agenda')?.classList.contains('on')) renderAgendaListPaint(selectedDate); }catch(e){}
+  try{ if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute(); }catch(e){}
+  try{ if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas(); }catch(e){}
+  try{ if(document.getElementById('pg-informe')?.classList.contains('on')) renderInforme(); }catch(e){}
+}
 function statusBadge(st){
   if(st==='done')return '<span class="jcard-status st-done">Completado</span>';
   if(st==='now')return '<span class="jcard-status st-now">En curso</span>';
@@ -2287,7 +2307,7 @@ function renderToday(){
       <div class="wav ${c.avc}">${c.av}</div>
       <div class="wi-inf">
         <div class="wi-name">${esc(c.n)}</div>
-        <div class="wi-det">${c.service}${c.address?(' · '+c.address):''}</div>
+        <div class="wi-det">${jobSvcLabel(j,c)}${c.address?(' · '+c.address):''}</div>
         ${j.notes?`<div class="jcard-notes" style="margin-top:5px">📝 ${j.notes}</div>`:''}
         ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:4px;font-weight:700">${j.assignLabel}</div>`:''}
         <a class="nav-btn" href="javascript:void(0)" onclick="event.stopPropagation();goNavigate(${c.lat},${c.lng})">
@@ -3113,7 +3133,7 @@ function generarRecorrido(quiet){
         <div class="rs-num">${i+1}</div>
         <div class="rs-info">
           <div class="rs-name">${esc(cl.n)}</div>
-          <div class="rs-detail">${cl.address||cl.zone} · ${j.time||'sin hora'} · ${cl.service}</div>
+          <div class="rs-detail">${cl.address||cl.zone} · ${j.time||'sin hora'} · ${jobSvcLabel(j,cl)}</div>
         </div>
         <div class="rs-dist">
           <div>${distTxt}</div>
@@ -3354,7 +3374,7 @@ function renderAgendaListPaint(key){
         <div>
           <div class="jcard-time">${j.time||'--:--'} ${j.status==='done'?'✓':''}</div>
           <div class="jcard-name">${esc(c.n)}</div>
-          <div class="jcard-svc">${c.service} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
+          <div class="jcard-svc">${jobSvcLabel(j,c)} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
           ${c.address?`<div class="jcard-addr">📍 ${c.address}</div>`:''}
           ${j.notes?`<div class="jcard-notes">📝 ${j.notes}</div>`:''}
           ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:3px;font-weight:700">${j.assignLabel}</div>`:''}
@@ -3457,8 +3477,7 @@ function saveDetalleLimpieza(){
   closeModal('detlimp');
   toast('✓ Detalle del trabajo guardado');
   asCtx=null;
-  renderFinanzas();
-  if(document.getElementById('pg-informe')?.classList.contains('on')) renderInforme();
+  refreshJobViews();
   // Igual que con el valor editado: se sube a Supabase (columnas
   // acido_litros / duracion_min en trabajos) si el trabajo ya está
   // sincronizado.
@@ -3488,10 +3507,7 @@ function saveEditPrice(){
   e.price=val;
   dbSave();
   closeModal('editprice');
-  renderToday();
-  if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute();
-  if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
-  if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas();
+  refreshJobViews();
   toast('✓ Valor de esta limpieza actualizado');
   asCtx=null;
   // Ahora sí se sube a Supabase (columna "precio" en trabajos), para que
@@ -6568,7 +6584,7 @@ function renderEmpleadoView(){
     let html='<div class="emp-job-card '+(j.status==='done'?'done':'')+'">';
     html+='<span class="emp-job-status '+stC+'">'+stL+'</span>';
     html+='<div class="emp-job-client">'+cl.n+'</div>';
-    html+='<div class="emp-job-svc">'+cl.service+(j.time?' · '+j.time:'')+'</div>';
+    html+='<div class="emp-job-svc">'+jobSvcLabel(j,cl)+(j.time?' · '+j.time:'')+'</div>';
     if(cl.address) html+='<div class="emp-job-addr">📍 '+cl.address+'</div>';
     if(j.notes) html+='<div style="font-size:11px;color:var(--c5);margin-bottom:8px;font-style:italic">📝 '+j.notes+'</div>';
     if(j.assignLabel) html+='<div style="font-size:10px;color:var(--c6);margin-bottom:6px;font-weight:700">'+j.assignLabel+'</div>';
