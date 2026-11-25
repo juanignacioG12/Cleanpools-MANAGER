@@ -343,8 +343,6 @@ html,body{height:100%;overflow:hidden;background:#001D39;color:var(--text);font-
 .mfield{margin-bottom:12px}
 .dif-pills{display:flex;gap:8px}
 .dif-pill{flex:1;text-align:center;padding:10px 6px;border-radius:10px;border:1.5px solid var(--border2);background:var(--card);color:var(--c6);font-size:13px;font-weight:700;cursor:pointer}
-.tipo-pills{display:flex;flex-wrap:wrap;gap:8px}
-.tipo-pills .dif-pill{flex:1 1 45%;font-size:12.5px}
 .dif-pill.on{border-color:var(--c6);background:rgba(123,189,232,.22);color:var(--text);box-shadow:0 0 0 1px var(--c6)}
 .mlabel{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--text3);text-transform:uppercase;margin-bottom:5px}
 .minput{width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none}
@@ -1605,6 +1603,7 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
         </div>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
+      <div id="cp-auto-cta" style="display:none;padding:8px 0"><div class="bconfirm" style="text-align:center;padding:10px;border-radius:10px;font-size:12px;cursor:pointer" onclick="cpOpenAutoAgenda()">🗓 Generar agenda automática</div></div>
       <div class="agenda-date" id="agenda-date">—</div>
       <div id="agenda-list"></div>
     </div>
@@ -1759,6 +1758,12 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     <span class="fab-opt-lbl">Nueva Tarea</span>
     <div class="fab-opt-ico">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    </div>
+  </div>
+  <div class="fab-opt" onclick="closeFab();cpOpenAutoAgenda()">
+    <span class="fab-opt-lbl">Generar agenda</span>
+    <div class="fab-opt-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/></svg>
     </div>
   </div>
   <div class="fab-opt" onclick="closeFab();showPage('calculadora')">
@@ -2265,26 +2270,6 @@ function jobsFor(dateKey){
   return (schedule[dateKey]||[]).map((e,idx)=>({...e,idx,client:getClientById(e.clientId)}))
     .filter(j=>j.client && !j.client.deleted);
 }
-// Etiqueta del servicio de UNA visita: los trabajos cargados en el detalle (uno o varios);
-// si no se cargó ninguno, el servicio habitual del cliente.
-function jobSvcLabel(j,c){
-  const ci=j&&j.cierre;
-  const a=ci&&(Array.isArray(ci.tipos)&&ci.tipos.length?ci.tipos:(ci.tipo?[ci.tipo]:null));
-  if(!a) return c.service;
-  const N={limpieza:'Limpieza profunda / total',mant:'Mantenimiento',bomba:'Arreglo de bomba',filtro:'Cambio de carga filtrante'};
-  const l=['limpieza','mant','bomba','filtro'].filter(t=>a.includes(t)).map(t=>N[t]).join(' + ');
-  return l||c.service;
-}
-// Repinta TODO lo que muestra datos de un trabajo: lista de hoy y métricas, calendario/agenda
-// del Dashboard, Agenda, Ruta, Finanzas e Informe.
-function refreshJobViews(){
-  try{ renderToday(); }catch(e){}
-  try{ if(document.getElementById('cal-inline')?.classList.contains('open') && selectedDate) renderAgendaListPaint(selectedDate); }catch(e){}
-  try{ if(document.getElementById('pg-agenda')?.classList.contains('on')) renderAgendaListPaint(selectedDate); }catch(e){}
-  try{ if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute(); }catch(e){}
-  try{ if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas(); }catch(e){}
-  try{ if(document.getElementById('pg-informe')?.classList.contains('on')) renderInforme(); }catch(e){}
-}
 function statusBadge(st){
   if(st==='done')return '<span class="jcard-status st-done">Completado</span>';
   if(st==='now')return '<span class="jcard-status st-now">En curso</span>';
@@ -2307,7 +2292,7 @@ function renderToday(){
       <div class="wav ${c.avc}">${c.av}</div>
       <div class="wi-inf">
         <div class="wi-name">${esc(c.n)}</div>
-        <div class="wi-det">${jobSvcLabel(j,c)}${c.address?(' · '+c.address):''}</div>
+        <div class="wi-det">${c.service}${c.address?(' · '+c.address):''}</div>
         ${j.notes?`<div class="jcard-notes" style="margin-top:5px">📝 ${j.notes}</div>`:''}
         ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:4px;font-weight:700">${j.assignLabel}</div>`:''}
         <a class="nav-btn" href="javascript:void(0)" onclick="event.stopPropagation();goNavigate(${c.lat},${c.lng})">
@@ -3133,7 +3118,7 @@ function generarRecorrido(quiet){
         <div class="rs-num">${i+1}</div>
         <div class="rs-info">
           <div class="rs-name">${esc(cl.n)}</div>
-          <div class="rs-detail">${cl.address||cl.zone} · ${j.time||'sin hora'} · ${jobSvcLabel(j,cl)}</div>
+          <div class="rs-detail">${cl.address||cl.zone} · ${j.time||'sin hora'} · ${cl.service}</div>
         </div>
         <div class="rs-dist">
           <div>${distTxt}</div>
@@ -3374,7 +3359,7 @@ function renderAgendaListPaint(key){
         <div>
           <div class="jcard-time">${j.time||'--:--'} ${j.status==='done'?'✓':''}</div>
           <div class="jcard-name">${esc(c.n)}</div>
-          <div class="jcard-svc">${jobSvcLabel(j,c)} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
+          <div class="jcard-svc">${c.service} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
           ${c.address?`<div class="jcard-addr">📍 ${c.address}</div>`:''}
           ${j.notes?`<div class="jcard-notes">📝 ${j.notes}</div>`:''}
           ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:3px;font-weight:700">${j.assignLabel}</div>`:''}
@@ -3422,18 +3407,6 @@ function setDificultad(v){
   h.value = (h.value===v && v) ? '' : v; // tocar de nuevo deselecciona
   document.querySelectorAll('#dl-dif-pills .dif-pill').forEach(el=>el.classList.toggle('on',el.dataset.v===h.value));
 }
-const TIPOS_ORDEN=['limpieza','mant','bomba','filtro'];
-function getTiposSel(){ const v=document.getElementById('dl-tipo').value; return v?v.split(',').filter(Boolean):[]; }
-function setTiposSel(arr){
-  const a=TIPOS_ORDEN.filter(t=>(arr||[]).includes(t));
-  document.getElementById('dl-tipo').value=a.join(',');
-  document.querySelectorAll('#dl-tipo-pills .dif-pill').forEach(el=>el.classList.toggle('on',a.includes(el.dataset.v)));
-}
-function toggleTipoTrabajo(t){
-  const a=getTiposSel(); const i=a.indexOf(t);
-  if(i>=0) a.splice(i,1); else a.push(t);
-  setTiposSel(a);
-}
 function asEditDetalleLimpieza(){
   if(!asCtx)return;
   const e=schedule[asCtx.dateKey][asCtx.idx];
@@ -3448,7 +3421,7 @@ function asEditDetalleLimpieza(){
   setv('dl-prod',ci.ventaProductos);
   setv('dl-extra',ci.trabajoExtra);
   setv('dl-gastos',(ci.gastos!=null?ci.gastos:ci.costoArena)); // costoArena = nombre viejo del mismo dato
-  setTiposSel(infTiposDe(e,c)); // lo guardado; si no hay nada, el tipo habitual del cliente (queda a la vista y editable)
+  document.getElementById('dl-tipo').value=ci.tipo||'';
   document.getElementById('dl-mo').value=ci.manoObra!=null?ci.manoObra:'';
   closeModal('actions');
   openModal('detlimp');
@@ -3469,21 +3442,20 @@ function saveDetalleLimpieza(){
   const nz=v=>(v&&v>0)?v:null;
   const valor=num('dl-valor');
   if(valor!=null && valor!==(e.price??getClientById(e.clientId)?.price)) e.price=valor;
-  const tiposSel=getTiposSel();
-  const ci={ tipos:tiposSel.length?tiposSel:null, tipo:tiposSel[0]||null, manoObra:num('dl-mo'),
+  const ci={ tipo:document.getElementById('dl-tipo').value||null, manoObra:num('dl-mo'),
              gastos:nz(num('dl-gastos')), trabajoExtra:nz(num('dl-extra')), ventaProductos:nz(num('dl-prod')) };
   e.cierre = Object.values(ci).some(v=>v!=null) ? ci : null;
   dbSave();
   closeModal('detlimp');
   toast('✓ Detalle del trabajo guardado');
   asCtx=null;
-  refreshJobViews();
+  renderFinanzas();
+  if(document.getElementById('pg-informe')?.classList.contains('on')) renderInforme();
   // Igual que con el valor editado: se sube a Supabase (columnas
   // acido_litros / duracion_min en trabajos) si el trabajo ya está
   // sincronizado.
   if(e.supabase_id){
-    _detalleDirty.add(e.supabase_id);
-    saveTrabajoToSupabase(e, dateKey).then(()=>{ _detalleDirty.delete(e.supabase_id); }).catch(err=>{
+    saveTrabajoToSupabase(e, dateKey).catch(err=>{
       console.warn('[SB] sync detalle limpieza:',err);
       toast('⚠ Se guardó acá, pero no se pudo subir a la nube todavía');
     });
@@ -3507,7 +3479,10 @@ function saveEditPrice(){
   e.price=val;
   dbSave();
   closeModal('editprice');
-  refreshJobViews();
+  renderToday();
+  if(document.getElementById('pg-ruta')?.classList.contains('on')) renderRoute();
+  if(document.getElementById('pg-agenda').classList.contains('on')) renderAgendaList(selectedDate);
+  if(document.getElementById('pg-finanzas')?.classList.contains('on')) renderFinanzas();
   toast('✓ Valor de esta limpieza actualizado');
   asCtx=null;
   // Ahora sí se sube a Supabase (columna "precio" en trabajos), para que
@@ -4294,21 +4269,13 @@ const infN=(v,d=1)=>(Math.round(v*Math.pow(10,d))/Math.pow(10,d)).toLocaleString
 const infPct=(a,b)=>b>0?Math.round(a/b*100):0;
 
 function infTipo(e,cl){
-  const s=(cl&&cl.service)||'';
+  const t=e.cierre&&e.cierre.tipo; if(t) return t;
+  const s=cl.service||'';
   if(/limpieza/i.test(s)) return 'limpieza';
   if(/filtr/i.test(s)) return 'filtro';
   if(/bomba/i.test(s)) return 'bomba';
   return 'mant';
 }
-// Trabajos realizados en la visita (uno o varios). Prioridad: lo cargado en el
-// detalle del trabajo; solo si no se cargó nada se usa el tipo habitual del cliente.
-function infTiposDe(e,cl){
-  const ci=(e&&e.cierre)||{};
-  let a=Array.isArray(ci.tipos)?ci.tipos.slice():(ci.tipo?[ci.tipo]:[]);
-  a=TIPOS_ORDEN.filter(t=>a.includes(t));
-  return a.length?a:[infTipo(e,cl)];
-}
-const infTiposLabel=(tipos,corto)=>tipos.map(t=>(corto?INF_CORTO:INF_TIPOS)[t]).join(' + ');
 function infMatLabel(p){
   if(!p||!p.material) return null;
   return p.material+(p.pintada?' '+(INF_PINT[p.material]||'pintado'):'');
@@ -4320,19 +4287,18 @@ function infRows(from,to){
       if(e.status!=='done') return;
       const cl=getClientById(e.clientId);
       if(!cl||cl.deleted) return;
-      const tipos=infTiposDe(e,cl), tipo=tipos[0], ci=e.cierre||{};
+      const tipo=infTipo(e,cl), ci=e.cierre||{};
       const price=(e.price??cl.price??0), venta=ci.ventaProductos||0, extra=ci.trabajoExtra||0;
       const ac=(e.acidoLitros!=null)?e.acidoLitros:null;
       const acidoCosto=(ac||0)*INF.acido;
-      const moMap={limpieza:INF.moLimpieza,mant:INF.moMant,bomba:INF.moBomba,filtro:INF.moFiltro};
-      const moDef=tipos.reduce((a,t)=>a+(moMap[t]||0),0); // suma la mano de obra de cada trabajo marcado
+      const moDef={limpieza:INF.moLimpieza,mant:INF.moMant,bomba:INF.moBomba,filtro:INF.moFiltro}[tipo]||0;
       const mo=(ci.manoObra!=null)?ci.manoObra:moDef;
       const gastos=(ci.gastos!=null?ci.gastos:ci.costoArena)||0; // costoArena = nombre viejo del mismo dato
       const costoProd=venta*INF.costoProd/100, iva=venta*INF.iva/100;
       const cobro=price+venta+extra, costo=acidoCosto+mo+gastos+costoProd+iva, margen=cobro-costo;
       const p=cl.pileta||{};
       const m2=(+p.largo>0&&+p.ancho>0)?(+p.largo)*(+p.ancho):null;
-      rows.push({k,idx,cl,e,tipo,tipos,tipoKey:tipos.join('+'),tipoLbl:infTiposLabel(tipos),tipoCorto:infTiposLabel(tipos,true),price,venta,extra,cobro,ac,acidoCosto,mo,gastos,costoProd,iva,costo,margen,
+      rows.push({k,idx,cl,e,tipo,price,venta,extra,cobro,ac,acidoCosto,mo,gastos,costoProd,iva,costo,margen,
         pct:cobro>0?margen/cobro*100:0,horas:(e.duracionMin!=null)?e.duracionMin/60:null,m2,mat:infMatLabel(p),matBase:p.material||null,pintada:!!p.pintada});
     });
   });
@@ -4343,12 +4309,12 @@ const infSum=(arr,f)=>arr.reduce((a,r)=>a+f(r),0);
 function infLecturas(rows,mat){
   const out=[]; const nombre=r=>esc(r.cl.n);
   // 1) Trabajo más flojo
-  const cand=rows.filter(r=>!(r.tipos.length===1&&r.tipos[0]==='filtro')&&r.cobro>0);
+  const cand=rows.filter(r=>r.tipo!=='filtro'&&r.cobro>0);
   if(cand.length>=2){
     const w=cand.reduce((a,b)=>b.pct<a.pct?b:a);
     const det=[w.mat?'pileta de '+esc(w.mat):'', w.m2?infN(w.m2,0)+' m²':''].filter(Boolean).join(' de ');
     const ac=(w.ac!=null)?' que usó '+infN(w.ac)+' L de ácido'+(w.m2?' ('+infN(w.ac/w.m2,2)+' L/m²)':''):'';
-    out.push('<b>El trabajo más flojo es '+w.tipoCorto.toLowerCase()+' de '+nombre(w)+':</b> '+(det?det+',':'')+ac+' y dejó '+infF(w.margen)+' de margen ('+Math.round(w.pct)+'%). Para tener '+INF.margen+'% habría que cobrar unos '+infF(w.costo/(1-INF.margen/100))+'.');
+    out.push('<b>El trabajo más flojo es '+INF_CORTO[w.tipo].toLowerCase()+' de '+nombre(w)+':</b> '+(det?det+',':'')+ac+' y dejó '+infF(w.margen)+' de margen ('+Math.round(w.pct)+'%). Para tener '+INF.margen+'% habría que cobrar unos '+infF(w.costo/(1-INF.margen/100))+'.');
   }
   // 2) Pintadas vs lisas
   let mejor=null;
@@ -4364,7 +4330,7 @@ function infLecturas(rows,mat){
     if(lg.horas>=hProm*1.8&&mh<mhProm) out.push('<b>'+nombre(lg)+', caso raro:</b> '+infN(lg.horas)+' horas de trabajo. Con '+infF(lg.cobro)+' rindió unos '+infF(mh)+' de margen por hora, contra unos '+infF(mhProm)+' de promedio. Los trabajos largos o de piletas abandonadas conviene cobrarlos aparte.');
   }
   // 4) Mantenimiento
-  const mant=rows.filter(r=>r.tipos.length===1&&r.tipos[0]==='mant');
+  const mant=rows.filter(r=>r.tipo==='mant');
   if(mant.length&&mant.length<rows.length){
     const ing=infSum(mant,r=>r.price), mg=infSum(mant,r=>r.price-r.acidoCosto-r.mo-r.gastos);
     out.push('<b>Mantenimiento:</b> deja '+infPct(mg,ing)+'% de margen, pero son solo '+mant.length+' de los '+rows.length+' registros.');
@@ -4376,9 +4342,9 @@ function infLecturas(rows,mat){
     out.push('<b>Venta de artículos:</b> '+rv.length+' venta'+(rv.length>1?'s':'')+' por '+infF(v)+', con '+infPct(m,v)+'% de margen. Baja el % de los trabajos donde se vendió.');
   }
   // 6) Datos que faltan
-  const sinAc=rows.filter(r=>r.tipos.includes('limpieza')&&r.ac==null).length;
+  const sinAc=rows.filter(r=>r.tipo==='limpieza'&&r.ac==null).length;
   const sinT=rows.filter(r=>r.horas==null).length;
-  const sinM=rows.filter(r=>r.tipos.includes('limpieza')&&!(r.m2&&r.mat)).length;
+  const sinM=rows.filter(r=>r.tipo==='limpieza'&&!(r.m2&&r.mat)).length;
   const falt=[];
   if(sinAc) falt.push(sinAc+' limpieza'+(sinAc>1?'s':'')+' sin ácido');
   if(sinT) falt.push(sinT+' trabajo'+(sinT>1?'s':'')+' sin tiempo');
@@ -4399,11 +4365,10 @@ function renderInforme(){
 
   // Ingreso y margen por tipo de servicio
   h+='<div class="inf-sec">Ingreso y margen por tipo de servicio</div><div class="inf-card">';
-  const claves=[]; rows.forEach(r=>{ if(!claves.includes(r.tipoKey)) claves.push(r.tipoKey); });
-  claves.sort((a,b)=>a.split('+').length-b.split('+').length || a.localeCompare(b)).forEach(t=>{
-    const rs=rows.filter(r=>r.tipoKey===t); if(!rs.length) return;
+  ['limpieza','mant','bomba','filtro'].forEach(t=>{
+    const rs=rows.filter(r=>r.tipo===t); if(!rs.length) return;
     const i=infSum(rs,r=>r.price), c=infSum(rs,r=>r.acidoCosto+r.mo+r.gastos), m=i-c;
-    h+='<div class="inf-row"><b>'+rs[0].tipoLbl+' ('+rs.length+')</b><br>'+infF(i)+' → margen '+infF(m)+' ('+infPct(m,i)+'%)<div class="inf-bar"><i style="width:'+Math.max(0,Math.min(100,infPct(m,i)))+'%;background:var(--green)"></i></div></div>';
+    h+='<div class="inf-row"><b>'+INF_TIPOS[t]+' ('+rs.length+')</b><br>'+infF(i)+' → margen '+infF(m)+' ('+infPct(m,i)+'%)<div class="inf-bar"><i style="width:'+Math.max(0,Math.min(100,infPct(m,i)))+'%;background:var(--green)"></i></div></div>';
   });
   const rv=rows.filter(r=>r.venta>0);
   if(rv.length){ const v=infSum(rv,r=>r.venta), m=infSum(rv,r=>r.venta-r.costoProd-r.iva);
@@ -4419,7 +4384,7 @@ function renderInforme(){
 
   // Ácido por m² según material y estado (solo limpiezas con ácido y medidas)
   const grupos={};
-  rows.filter(r=>r.tipos.includes('limpieza')&&r.ac!=null&&r.m2&&r.mat).forEach(r=>{
+  rows.filter(r=>r.tipo==='limpieza'&&r.ac!=null&&r.m2&&r.mat).forEach(r=>{
     const g=grupos[r.mat]||(grupos[r.mat]={label:r.mat,base:r.matBase,pintada:r.pintada,n:0,m2:0,ac:0}); g.n++; g.m2+=r.m2; g.ac+=r.ac; });
   const mat=Object.values(grupos).map(g=>Object.assign(g,{lm2:g.m2>0?g.ac/g.m2:0})).sort((a,b)=>b.n-a.n);
   if(mat.length){
@@ -4436,7 +4401,7 @@ function renderInforme(){
   // Todos los registros, del peor al mejor margen
   const ord=[...rows].sort((a,b)=>a.pct-b.pct);
   h+='<div class="inf-sec">Los '+rows.length+' registros, de peor a mejor margen</div><div class="inf-card"><div class="inf-scroll"><table class="inf-t"><tr><th>Cliente</th><th>Tipo</th><th>Material</th><th class="n">m²</th><th class="n">Cobro</th><th class="n">Margen</th><th class="n">%</th></tr>'+
-    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+'</td><td>'+r.tipoCorto+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
+    ord.map(r=>'<tr class="tap" onclick="reporteEditarLimpieza(\''+r.k+'\','+r.idx+')"><td>'+esc(r.cl.n)+'</td><td>'+INF_CORTO[r.tipo]+'</td><td>'+(r.mat?esc(r.mat):'–')+'</td><td class="n">'+(r.m2?infN(r.m2,2):'–')+'</td><td class="n">'+infF(r.cobro)+'</td><td class="n">'+infF(r.margen)+'</td><td class="n"><b>'+Math.round(r.pct)+'%</b></td></tr>').join('')+'</table></div>'+
     '<div class="inf-note" style="padding:6px 0 0">El % es el margen sobre lo cobrado: valor del trabajo, venta de artículos y trabajo extra. Tocá un trabajo para editar sus datos.</div></div>';
 
   // Lecturas rápidas
@@ -5027,10 +4992,12 @@ function resetClienteForm(){
   document.getElementById('nc-pil-pintada').checked=false;
   document.getElementById('mtitle-cliente').textContent='Nuevo Cliente';
   document.getElementById('nc-delete-wrap').style.display='none';
+  if(window.cpPlanFill) cpPlanFill(null);
   locResetPreview();
 }
 function fabNewCliente(){
   resetClienteForm();
+  if(window.cpPlanFill) cpPlanFill(null);
   openModal('cliente');
 }
 function editClient(idParam){
@@ -5064,6 +5031,7 @@ function editClient(idParam){
   document.getElementById('nc-pil-pintada').checked = !!c.pileta?.pintada;
   document.getElementById('mtitle-cliente').textContent='Editar Cliente';
   document.getElementById('nc-delete-wrap').style.display='block';
+  if(window.cpPlanFill) cpPlanFill(c);
   openModal('cliente');
   if(validCoord(c.lat,c.lng)){
     document.getElementById('nc-lat').value=c.lat;
@@ -5154,6 +5122,7 @@ async function saveCliente(){
     _editingClientSnapshot = null;
     c.n=nombre;c.zone=zona;c.service=svc;c.price=precio;c.phone=tel;c.address=dir||zona;c.notes=notas;
     c.servicios=servicios;c.pileta=pileta;
+    if(window.cpPlanRead) c.plan=cpPlanRead();
     c.av=nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
     if(hasCoords){c.lat=latVal;c.lng=lngVal;c.googleMapsUrl=mapsUrl;}
     toast('✓ '+nombre+' actualizado');
@@ -5163,7 +5132,8 @@ async function saveCliente(){
     const coords = hasCoords ? [latVal,lngVal] : [null,null];
     clients.push({n:nombre,zone:zona,service:svc,price:precio,status:'activo',av,avc:AV[id%AV.length],
       last:'hoy',lat:coords[0],lng:coords[1],id,phone:tel,address:dir||zona,notes:notas,deleted:false,
-      googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString(),servicios,pileta});
+      googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString(),servicios,pileta,
+      plan:(window.cpPlanRead?cpPlanRead():null)});
     if(!hasCoords) toast('✓ '+nombre+' agregado sin ubicación GPS — editá el cliente para agregarla');
     else toast('✓ '+nombre+' agregado como cliente');
   }
@@ -6175,6 +6145,7 @@ function mapSbCliente(sc, existingId){
     price:sc.precio||0,lat:sc.lat,lng:sc.lng,address:sc.direccion||sc.zona||'',phone:sc.telefono||'',
     notes:sc.notas||'',googleMapsUrl:sc.google_maps_url||'',status:sc.status||'activo',deleted:sc.deleted||false,
     servicios:sc.servicios||[],pileta:sc.pileta||null,
+    ...(sc.plan?{plan:sc.plan}:{}),
     fechaCreacion:sc.created_at,av:sc.nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2),
     avc:AV[id%AV.length],last:'Sin registro',id,_synced:true};
 }
@@ -6222,9 +6193,6 @@ const _borrandoAhora = new Set();
 // ver saveWork()) + set de _lid marcados para borrar en cuanto terminen de
 // subirse a Supabase.
 let _nextJobLid = 1;
-// Trabajos cuyo detalle (tipo, ácido, tiempo, costos) se editó acá y todavía no se confirmó en la nube:
-// mientras estén en este set, una recarga desde Supabase NO debe pisar lo local con datos viejos.
-const _detalleDirty = new Set();
 const _pendingDeleteLid = new Set();
 
 function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
@@ -6264,11 +6232,11 @@ function _mergeTrabajosIntoSchedule(dateKey, trabajosDelDia){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:((_detalleDirty.has(t.id)&&preciosLocales.has(t.id))?preciosLocales.get(t.id):(t.precio!=null?t.precio:preciosLocales.get(t.id))),
-      acidoLitros:((_detalleDirty.has(t.id)&&acidoLocal.has(t.id))?acidoLocal.get(t.id):(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id))),
-      duracionMin:((_detalleDirty.has(t.id)&&duracionLocal.has(t.id))?duracionLocal.get(t.id):(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))),
-      dificultad:((_detalleDirty.has(t.id)&&dificultadLocal.has(t.id))?dificultadLocal.get(t.id):(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))),
-      cierre:((_detalleDirty.has(t.id)&&cierreLocal.has(t.id))?cierreLocal.get(t.id):(t.cierre!=null?t.cierre:cierreLocal.get(t.id)))});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
+      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
+      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id)),
+      cierre:(t.cierre!=null?t.cierre:cierreLocal.get(t.id))});
   });
   const pendientesFiltradas = pendientes.filter(p=> !nuevas.some(n=> n.clientId===p.clientId && n.time===p.time));
   schedule[dateKey] = [...nuevas, ...pendientesFiltradas];
@@ -6341,11 +6309,11 @@ async function syncTrabajosForDate(dateKey){
     if(currentUser?.rol==='empleado'&&!asignado)return;
     nuevas.push({supabase_id:t.id,clientId:lc.id,time:t.hora_inicio||'',endTime:t.hora_fin||'',
       notes:t.notas||'',status:t.status||'pend',recurrenceId:t.recurrence_id,_fromSupabase:true,asignaciones:t.asignaciones||[],
-      price:((_detalleDirty.has(t.id)&&preciosLocales.has(t.id))?preciosLocales.get(t.id):(t.precio!=null?t.precio:preciosLocales.get(t.id))),
-      acidoLitros:((_detalleDirty.has(t.id)&&acidoLocal.has(t.id))?acidoLocal.get(t.id):(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id))),
-      duracionMin:((_detalleDirty.has(t.id)&&duracionLocal.has(t.id))?duracionLocal.get(t.id):(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id))),
-      dificultad:((_detalleDirty.has(t.id)&&dificultadLocal.has(t.id))?dificultadLocal.get(t.id):(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id))),
-      cierre:((_detalleDirty.has(t.id)&&cierreLocal.has(t.id))?cierreLocal.get(t.id):(t.cierre!=null?t.cierre:cierreLocal.get(t.id)))});
+      price:(t.precio!=null?t.precio:preciosLocales.get(t.id)),
+      acidoLitros:(t.acido_litros!=null?t.acido_litros:acidoLocal.get(t.id)),
+      duracionMin:(t.duracion_min!=null?t.duracion_min:duracionLocal.get(t.id)),
+      dificultad:(t.dificultad!=null?t.dificultad:dificultadLocal.get(t.id)),
+      cierre:(t.cierre!=null?t.cierre:cierreLocal.get(t.id))});
   });
 
   // Si alguna "pendiente" ya aparece en 'nuevas' (le llegó su supabase_id
@@ -6453,11 +6421,17 @@ async function saveClienteToSupabase(cl){
       precio:cl.price,lat:cl.lat||null,lng:cl.lng||null,google_maps_url:cl.googleMapsUrl||'',notas:cl.notes||'',
       status:cl.status,deleted:cl.deleted||false,servicios:cl.servicios||[],pileta:cl.pileta||null,
       updated_at:new Date().toISOString()};
+    // 'plan' es una columna opcional: si todavía no existe en Supabase se
+    // reintenta sin ella (el plan queda guardado en este teléfono).
+    if(cl.plan!==undefined && !window._noColPlan) p.plan=cl.plan||null;
+    const _sinPlan = er => { const t=((er&&er.message)||'')+((er&&er.details)||''); if(p.plan!==undefined && /plan/i.test(t)){ window._noColPlan=true; delete p.plan; return true; } return false; };
     if(cl.supabase_id){
-      const {error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id);
+      let error;
+      for(let i=0;i<2;i++){ ({error}=await sb.from('clientes').update(p).eq('id',cl.supabase_id)); if(!(error&&_sinPlan(error))) break; }
       if(error) throw error;
     } else {
-      const {data,error}=await sb.from('clientes').insert(p).select().single();
+      let data,error;
+      for(let i=0;i<2;i++){ ({data,error}=await sb.from('clientes').insert(p).select().single()); if(!(error&&_sinPlan(error))) break; }
       if(error) throw error;
       if(data) cl.supabase_id=data.id;
     }
@@ -6497,7 +6471,7 @@ async function saveTrabajoToSupabase(job,dateKey){
     // 'dificultad' y 'cierre' son columnas opcionales: si todavía no existen en
     // Supabase, se reintenta sin ellas para no romper el guardado del resto.
     if(job.dificultad!=null && !window._noColDificultad) p.dificultad=job.dificultad;
-    if(job.cierre!==undefined && !window._noColCierre) p.cierre=job.cierre;
+    if(job.cierre!=null && !window._noColCierre) p.cierre=job.cierre;
     const _colFaltante = er => {
       const t=((er&&er.message)||'')+((er&&er.details)||'');
       if(p.dificultad!==undefined && /dificultad/i.test(t)){ window._noColDificultad=true; delete p.dificultad; return true; }
@@ -6584,7 +6558,7 @@ function renderEmpleadoView(){
     let html='<div class="emp-job-card '+(j.status==='done'?'done':'')+'">';
     html+='<span class="emp-job-status '+stC+'">'+stL+'</span>';
     html+='<div class="emp-job-client">'+cl.n+'</div>';
-    html+='<div class="emp-job-svc">'+jobSvcLabel(j,cl)+(j.time?' · '+j.time:'')+'</div>';
+    html+='<div class="emp-job-svc">'+cl.service+(j.time?' · '+j.time:'')+'</div>';
     if(cl.address) html+='<div class="emp-job-addr">📍 '+cl.address+'</div>';
     if(j.notes) html+='<div style="font-size:11px;color:var(--c5);margin-bottom:8px;font-style:italic">📝 '+j.notes+'</div>';
     if(j.assignLabel) html+='<div style="font-size:10px;color:var(--c6);margin-bottom:6px;font-weight:700">'+j.assignLabel+'</div>';
@@ -7598,6 +7572,28 @@ function exportToGoogleCalendar(dateKey){
       <div class="mlabel">Precio mensual ($)</div>
       <input class="minput" id="nc-precio" type="number" placeholder="Ej: 25000">
     </div>
+    <div class="mfield" id="nc-plan-box" style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--pdim)">
+      <div class="mlabel" style="color:var(--c6)">🗓 Plan de visitas (para generar la agenda automática)</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <select class="minput" id="nc-plan-freq" title="Frecuencia">
+          <option value="">Frecuencia: según servicio</option>
+          <option value="weekly">Semanal</option>
+          <option value="biweekly">Cada 15 días</option>
+          <option value="monthly">Cada 4 semanas</option>
+          <option value="none">Sin repetición (solo a pedido)</option>
+        </select>
+        <select class="minput" id="nc-plan-dow" title="Día de la semana">
+          <option value="">Día: automático</option>
+          <option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option>
+          <option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input class="minput" id="nc-plan-time" type="time" title="Hora fija (opcional)">
+        <select class="minput" id="nc-plan-assign" title="Responsable"><option value="">Responsable: sin asignar</option></select>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">Hora vacía = la app la calcula según la ruta. Día automático = agrupa por zona y equilibra la carga.</div>
+    </div>
     <div class="mfield">
       <div class="mlabel">Pileta — medidas y material</div>
       <div style="display:flex;gap:8px">
@@ -7794,15 +7790,14 @@ function exportToGoogleCalendar(dateKey){
       </div>
     </div>
     <div class="mfield">
-      <div class="mlabel">Trabajos realizados (podés marcar varios — se suman)</div>
-      <input type="hidden" id="dl-tipo" value="">
-      <div class="dif-pills tipo-pills" id="dl-tipo-pills">
-        <div class="dif-pill" data-v="limpieza" onclick="toggleTipoTrabajo('limpieza')">Limpieza profunda / total</div>
-        <div class="dif-pill" data-v="mant" onclick="toggleTipoTrabajo('mant')">Mantenimiento</div>
-        <div class="dif-pill" data-v="bomba" onclick="toggleTipoTrabajo('bomba')">Arreglo de bomba</div>
-        <div class="dif-pill" data-v="filtro" onclick="toggleTipoTrabajo('filtro')">Cambio de carga filtrante</div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px">El informe usa exactamente los trabajos marcados acá (no el tipo habitual del cliente) y suma la mano de obra de cada uno.</div>
+      <div class="mlabel">Tipo de trabajo (para el informe)</div>
+      <select class="minput" id="dl-tipo">
+        <option value="">Automático (según el cliente)</option>
+        <option value="limpieza">Limpieza profunda / total</option>
+        <option value="mant">Mantenimiento</option>
+        <option value="bomba">Arreglo de bomba</option>
+        <option value="filtro">Cambio de carga filtrante</option>
+      </select>
     </div>
     <div class="mfield">
       <div class="mlabel">Mano de obra ($) — vacío = tarifa del informe</div>
@@ -8024,6 +8019,455 @@ window.calcPlusReset=function(){
   };
   if(isIOS&&!standalone()) show();
 })();
+</script>
+<script>
+// ════════════════════════════════════════════════════════════
+// AGENDA AUTOMÁTICA — plan por cliente + generador con vista previa
+//  1) Cada cliente guarda su plan (frecuencia, día, hora, responsable).
+//  2) "Generar agenda" arma las próximas semanas: respeta el día habitual,
+//     agrupa por zona, equilibra la carga, ordena por ruta (vecino más
+//     cercano + 2-opt) y escalona horarios según duración y traslado.
+//  3) Nunca duplica: salta clientes que ya tienen visita esa semana.
+// ════════════════════════════════════════════════════════════
+(function(){
+'use strict';
+const DOWN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MONTHN=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const CFG_KEY='cp_aa_cfg_v1';
+
+// ── estilos ──
+const st=document.createElement('style');
+st.textContent=`
+.aa-chips{display:flex;gap:6px;flex-wrap:wrap}
+.aa-chip{padding:7px 11px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none}
+.aa-chip.on{background:var(--c3);color:#fff;border-color:var(--c3)}
+.aa-sum{background:var(--pdim);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px}
+.aa-sum b{color:var(--c6)}
+.aa-day{border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.aa-day.off{opacity:.45}
+.aa-day>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-size:12px;font-weight:800;color:var(--text1,inherit)}
+.aa-day>summary::-webkit-details-marker{display:none}
+.aa-day-meta{margin-left:auto;font-size:10px;font-weight:700;color:var(--text3);text-align:right}
+.aa-warn{color:#e8a33d}
+.aa-stop{display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--text2)}
+.aa-stop .t{font-weight:800;color:var(--c6);min-width:78px;font-variant-numeric:tabular-nums}
+.aa-stop .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aa-stop .z{font-size:10px;color:var(--text3)}
+.aa-stop .x{cursor:pointer;padding:0 4px;color:var(--text3);font-weight:800}
+.aa-stop .x:active{color:var(--red)}
+`;
+document.head.appendChild(st);
+
+// ── modal ──
+const wrap=document.createElement('div');
+wrap.innerHTML=`
+<div class="modal-overlay" id="modal-autoagenda" onclick="if(event.target===this)closeModal('autoagenda')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div class="mtitle">Generar agenda automática</div>
+    <div id="aa-cfg">
+      <div style="display:flex;gap:8px">
+        <div class="mfield" style="flex:1"><div class="mlabel">Desde</div><input class="minput" id="aa-start" type="date"></div>
+        <div class="mfield" style="flex:1"><div class="mlabel">Cuántas semanas</div>
+          <select class="minput" id="aa-weeks"><option value="1">1 semana</option><option value="2">2 semanas</option><option value="4" selected>4 semanas</option></select></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div class="mfield" style="flex:1"><div class="mlabel">Primera visita</div><input class="minput" id="aa-time" type="time" value="09:00"></div>
+        <div class="mfield" style="flex:1"><div class="mlabel">Jornada hasta</div><input class="minput" id="aa-end" type="time" value="18:00"></div>
+      </div>
+      <div class="mfield"><div class="mlabel">Días de trabajo</div><div class="aa-chips" id="aa-days"></div></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 12px"><input type="checkbox" id="aa-lunch" checked style="margin:0"> Pausa de almuerzo 13:00–14:00</label>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Usa el plan de cada cliente (día, frecuencia, hora, responsable). Lo que no tenga día fijo se agrupa por zona y se reparte parejo según el tiempo de la jornada; cada responsable se calcula por separado. Antes de guardar vas a ver la propuesta completa y podés ajustarla.</div>
+    </div>
+    <div id="aa-prev" style="display:none"></div>
+    <div class="mactions" id="aa-actions"></div>
+  </div>
+</div>`;
+document.body.appendChild(wrap.firstElementChild);
+
+// ── helpers de fecha/hora ──
+const pk=k=>{const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);};
+const mondayOf=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x;};
+const weeksBetween=(a,b)=>Math.round((mondayOf(b)-mondayOf(a))/(7*864e5));
+const toMin=s=>{if(!s)return null;const [h,m]=s.split(':').map(Number);return h*60+(m||0);};
+const fmt=m=>pad2(Math.floor(m/60)%24)+':'+pad2(m%60);
+const dayLabel=k=>{const d=pk(k);return DOWN[d.getDay()]+' '+d.getDate()+' '+MONTHN[d.getMonth()];};
+const hasGps=c=>validCoord(c.lat,c.lng);
+
+// ── plan del cliente ──
+window.cpResolvePlan=function(c){
+  const p=c.plan||{};
+  let freq=p.freq;
+  if(!freq){const s=(c.service||'').toLowerCase();freq=/quinc/.test(s)?'biweekly':(/mant/.test(s)?'weekly':'none');}
+  const dow=(p.dow===''||p.dow==null)?null:Number(p.dow);
+  return {freq,dow,time:p.time||'',assign:p.assign||''};
+};
+const PERIOD={weekly:1,biweekly:2,monthly:4};
+function durationMin(c){
+  const s=(c.service||'').toLowerCase();
+  if(/mant/.test(s)) return 60;
+  if(/profunda|limpieza/.test(s)) return 300;
+  return 60;
+}
+const travelMin=km=>Math.max(5,Math.ceil(km*1.4/35*60/5)*5);
+
+// campos del formulario de cliente
+function fillAssignOptions(selected){
+  const sel=document.getElementById('nc-plan-assign'); if(!sel)return;
+  const users=(typeof _loginUsersCache!=='undefined'&&_loginUsersCache)||[];
+  const gr=(typeof grupos!=='undefined'&&grupos)||[];
+  sel.innerHTML='<option value="">Responsable: sin asignar</option>'+
+    users.map(u=>`<option value="user:${esc(u.id)}">👤 ${esc(u.nombre)}</option>`).join('')+
+    (gr.length?'<optgroup label="Grupos">'+gr.map(g=>`<option value="group:${esc(g.id)}">🏷 ${esc(g.nombre)}</option>`).join('')+'</optgroup>':'');
+  if(selected) sel.value=selected;
+}
+window.cpPlanFill=function(c){
+  const p=(c&&c.plan)||{};
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
+  set('nc-plan-freq',p.freq||'');
+  set('nc-plan-dow',(p.dow===0||p.dow)?String(p.dow):'');
+  set('nc-plan-time',p.time||'');
+  fillAssignOptions(p.assign||'');
+  try{ refreshUsersCache().then(()=>fillAssignOptions(p.assign||'')).catch(()=>{}); }catch(e){}
+};
+window.cpPlanRead=function(){
+  const g=id=>(document.getElementById(id)||{}).value||'';
+  const freq=g('nc-plan-freq'),dow=g('nc-plan-dow'),time=g('nc-plan-time'),assign=g('nc-plan-assign');
+  if(!freq&&!dow&&!time&&!assign) return null;
+  return {freq,dow:dow===''?null:Number(dow),time,assign};
+};
+
+// ── configuración ──
+let cfgDays=new Set([1,2,3,4,5,6]);
+function loadCfg(){
+  try{
+    const c=JSON.parse(localStorage.getItem(CFG_KEY)||'{}');
+    if(c.endTime) document.getElementById('aa-end').value=c.endTime;
+    if(c.time) document.getElementById('aa-time').value=c.time;
+    if(c.weeks) document.getElementById('aa-weeks').value=c.weeks;
+    if(typeof c.lunch==='boolean') document.getElementById('aa-lunch').checked=c.lunch;
+    if(Array.isArray(c.days)&&c.days.length) cfgDays=new Set(c.days);
+  }catch(e){}
+}
+function saveCfg(cfg){
+  try{localStorage.setItem(CFG_KEY,JSON.stringify({endTime:cfg.endTime,time:cfg.startTime,weeks:cfg.weeks,lunch:cfg.lunch,days:[...cfg.days]}));}catch(e){}
+}
+function renderDayChips(){
+  document.getElementById('aa-days').innerHTML=[1,2,3,4,5,6,0].map(d=>
+    `<div class="aa-chip${cfgDays.has(d)?' on':''}" onclick="cpAaDay(${d})">${DOWN[d]}</div>`).join('');
+}
+window.cpAaDay=function(d){ if(cfgDays.has(d)){ if(cfgDays.size>1) cfgDays.delete(d); } else cfgDays.add(d); renderDayChips(); };
+function readCfg(){
+  return {
+    start:pk(document.getElementById('aa-start').value||dkey(addDays(new Date(),1))),
+    weeks:parseInt(document.getElementById('aa-weeks').value)||4,
+    endTime:document.getElementById('aa-end').value||'18:00',
+    startTime:document.getElementById('aa-time').value||'09:00',
+    lunch:document.getElementById('aa-lunch').checked,
+    days:new Set(cfgDays)
+  };
+}
+
+// ── ruta: vecino más cercano + 2-opt ──
+function orderRoute(stops,start){
+  const g=stops.filter(s=>hasGps(s.c)), ng=stops.filter(s=>!hasGps(s.c));
+  if(g.length<=1) return g.concat(ng);
+  const P=g.map(s=>[s.c.lat,s.c.lng]), n=P.length;
+  const sp=(start&&validCoord(start.lat,start.lng))?[start.lat,start.lng]:null;
+  if(sp) P.push(sp);
+  const D=(a,b)=>haversineKm(P[a],P[b]);
+  let first;
+  if(sp) first=n; else{
+    const cy=P.reduce((a,p)=>a+p[0],0)/n, cx=P.reduce((a,p)=>a+p[1],0)/n;
+    let bd=-1; first=0; for(let i=0;i<n;i++){const d=haversineKm([cy,cx],P[i]); if(d>bd){bd=d;first=i;}}
+  }
+  const path=[first], left=new Set([...Array(n).keys()]); left.delete(first);
+  while(left.size){
+    const last=path[path.length-1]; let best=-1,bd=Infinity;
+    left.forEach(i=>{const d=D(last,i); if(d<bd){bd=d;best=i;}});
+    path.push(best); left.delete(best);
+  }
+  let improved=true,guard=0;
+  while(improved&&guard++<60){
+    improved=false;
+    for(let i=1;i<path.length-1;i++) for(let j=i+1;j<path.length;j++){
+      const a=path[i-1],b=path[i],c=path[j],d=j+1<path.length?path[j+1]:null;
+      const before=D(a,b)+(d!=null?D(c,d):0), after=D(a,c)+(d!=null?D(b,d):0);
+      if(after<before-1e-9){ const seg=path.slice(i,j+1).reverse(); path.splice(i,seg.length,...seg); improved=true; }
+    }
+  }
+  return path.filter(i=>i<n).map(i=>g[i]).concat(ng);
+}
+function pathKm(list,start){
+  let km=0,prev=(start&&validCoord(start.lat,start.lng))?[start.lat,start.lng]:null;
+  list.forEach(s=>{ if(!hasGps(s.c)) return; const pt=[s.c.lat,s.c.lng]; if(prev) km+=haversineKm(prev,pt); prev=pt; });
+  return km;
+}
+
+// ── horarios de un día (anclas con hora fija + resto escalonado) ──
+function layoutDay(stops,cfg){
+  const base=(typeof baseLocation!=='undefined')?baseLocation:null;
+  const anchored=stops.filter(s=>s.p.time).map(s=>({...s,start:toMin(s.p.time),dur:durationMin(s.c)})).sort((a,b)=>a.start-b.start);
+  const flex=orderRoute(stops.filter(s=>!s.p.time),base);
+  let t=toMin(cfg.startTime), prev=base&&validCoord(base.lat,base.lng)?[base.lat,base.lng]:null;
+  const out=[];
+  flex.forEach(s=>{
+    const dur=durationMin(s.c);
+    if(hasGps(s.c)){ const pt=[s.c.lat,s.c.lng]; if(prev) t+=travelMin(haversineKm(prev,pt)); prev=pt; }
+    else if(out.length) t+=10;
+    for(let k=0;k<6;k++){ // evitar choques con almuerzo y horas fijas
+      let moved=false;
+      if(cfg.lunch){
+        if(t>=13*60&&t<14*60){t=14*60;moved=true;}
+        else if(t<13*60&&t+dur>13*60+15){t=14*60;moved=true;}
+      }
+      for(const a of anchored){ if(t<a.start+a.dur && t+dur>a.start){ t=a.start+a.dur; moved=true; } }
+      if(!moved) break;
+    }
+    out.push({...s,start:t,dur,end:t+dur}); t+=dur;
+  });
+  anchored.forEach(a=>out.push({...a,end:a.start+a.dur}));
+  out.sort((a,b)=>a.start-b.start);
+  let maxEnd=0;
+  out.forEach((s,i)=>{ s.clash=i>0&&s.start<maxEnd; maxEnd=Math.max(maxEnd,s.end); });
+  return {stops:out,km:pathKm(out,base),endMin:maxEnd};
+}
+
+// ── propuesta ──
+function lastJobDate(c,uptoKey){
+  let best=null;
+  for(const k of Object.keys(schedule)){
+    if(k>uptoKey) continue;
+    if(best&&k<=best) continue;
+    if((schedule[k]||[]).some(e=>e.clientId===c.id)) best=k;
+  }
+  return best?pk(best):null;
+}
+function weekHasJob(c,d){
+  const m=mondayOf(d);
+  for(let i=0;i<7;i++){ const k=dkey(addDays(m,i)); if((schedule[k]||[]).some(e=>e.clientId===c.id)) return true; }
+  return false;
+}
+function angleSort(list){
+  const g=list.filter(x=>hasGps(x.c)), ng=list.filter(x=>!hasGps(x.c));
+  if(g.length>2){
+    const cy=g.reduce((a,x)=>a+x.c.lat,0)/g.length, cx=g.reduce((a,x)=>a+x.c.lng,0)/g.length;
+    g.sort((a,b)=>Math.atan2(a.c.lat-cy,a.c.lng-cx)-Math.atan2(b.c.lat-cy,b.c.lng-cx));
+  }
+  return g.concat(ng);
+}
+function buildProposal(cfg){
+  const end=addDays(cfg.start,cfg.weeks*7-1), endKey=dkey(end);
+  const stats={skipNone:0,covered:0,noGps:0,clients:0};
+  const capMin=Math.max(60,(toMin(cfg.endTime)-toMin(cfg.startTime))-(cfg.lunch?60:0));
+  const elig=[];
+  clients.forEach(c=>{
+    if(c.deleted||c.status!=='activo') return;
+    const p=cpResolvePlan(c);
+    if(p.freq==='none'){stats.skipNone++;return;}
+    const period=PERIOD[p.freq]||1;
+    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor:lastJobDate(c,endKey),dow:null,phase:0});
+  });
+  // carga (minutos por semana) por responsable y día
+  const loads={};
+  const L=crew=>loads[crew]||(loads[crew]=Object.fromEntries([...cfg.days].map(d=>[d,0])));
+  const auto=[];
+  elig.forEach(x=>{
+    if(x.p.dow!=null) x.dow=x.p.dow;
+    else if(x.anchor&&cfg.days.has(x.anchor.getDay())) x.dow=x.anchor.getDay();
+    if(x.dow!=null){ const l=L(x.crew); l[x.dow]=(l[x.dow]||0)+x.w; } else auto.push(x);
+  });
+  const minDay=crew=>{const l=L(crew);return [...cfg.days].sort((a,b)=>(l[a]-l[b])||(a-b))[0];};
+  const byCrew={};
+  auto.forEach(x=>{((byCrew[x.crew]=byCrew[x.crew]||{})[x.c.zone||'—']=(byCrew[x.crew][x.c.zone||'—']||[])).push(x);});
+  Object.entries(byCrew).forEach(([crew,zones])=>{
+    // meta por día: repartir parejo entre los días de trabajo (sin pasar la jornada)
+    const totalW=elig.filter(x=>x.crew===crew).reduce((a,x)=>a+x.w,0);
+    const target=Math.min(capMin,Math.ceil(totalW/cfg.days.size*1.1));
+    Object.values(zones).sort((a,b)=>b.length-a.length).forEach(list=>{
+      const l=L(crew); let day=minDay(crew);
+      angleSort(list).forEach(x=>{
+        if(l[day]+x.w>target+1e-9) day=minDay(crew);
+        x.dow=day; l[day]+=x.w;
+      });
+    });
+  });
+  // fase para quincenales / 4 semanas sin antecedente: alternar para equilibrar
+  const phaseCt={};
+  elig.forEach(x=>{
+    if(x.period>1&&!x.anchor){ const key=x.crew+'|'+x.dow+'-'+x.period; x.phase=(phaseCt[key]=(phaseCt[key]||0)+1)%x.period; }
+  });
+  // fechas
+  const byDate={};
+  elig.forEach(x=>{
+    stats.clients++;
+    if(!hasGps(x.c)) stats.noGps++;
+    let any=false,coveredHit=false;
+    for(let d=new Date(cfg.start);d<=end;d=addDays(d,1)){
+      if(d.getDay()!==x.dow) continue;
+      const wk=x.anchor?weeksBetween(x.anchor,d):weeksBetween(cfg.start,d);
+      const m=((wk%x.period)+x.period)%x.period;
+      if(x.anchor?m!==0:m!==x.phase) continue;
+      if(weekHasJob(x.c,d)){coveredHit=true;continue;}
+      const key=dkey(d); (byDate[key]=byDate[key]||[]).push(x); any=true;
+    }
+    if(!any&&coveredHit) stats.covered++;
+  });
+  const days=Object.keys(byDate).sort().map(key=>makeDay(key,byDate[key],cfg));
+  const crews=new Set(); days.forEach(d=>d.crews.forEach(c=>crews.add(c.crew)));
+  stats.multiCrew=crews.size>1;
+  stats.overDays=days.filter(d=>d.crews.some(c=>c.lay.endMin>toMin(cfg.endTime))).length;
+  return {days,stats,cfg};
+}
+function makeDay(key,stops,cfg){
+  const by={}; stops.forEach(x=>(by[x.crew]=by[x.crew]||[]).push(x));
+  const crews=Object.keys(by).sort().map(crew=>({crew,stops:by[crew],lay:layoutDay(by[crew],cfg)}));
+  return {key,on:true,crews};
+}
+const dayStops=d=>d.crews.reduce((a,c)=>a+c.stops.length,0);
+const dayKm=d=>d.crews.reduce((a,c)=>a+c.lay.km,0);
+const dayEnd=d=>Math.max(0,...d.crews.map(c=>c.lay.endMin));
+
+// ── UI ──
+let PROP=null;
+function setActions(html){document.getElementById('aa-actions').innerHTML=html;}
+function showCfg(){
+  document.getElementById('aa-cfg').style.display='block';
+  document.getElementById('aa-prev').style.display='none';
+  setActions('<div class="bcancel" onclick="closeModal(\'autoagenda\')">Cancelar</div><div class="bconfirm" onclick="cpAaCalc()">Ver propuesta →</div>');
+}
+window.cpOpenAutoAgenda=async function(){
+  if(!canCreateTasks()){ toast('⚠ Tu usuario no puede generar agenda'); return; }
+  loadCfg(); renderDayChips();
+  const s=document.getElementById('aa-start'); if(!s.value||s.value<=TODAY_KEY) s.value=dkey(addDays(new Date(),1));
+  showCfg(); openModal('autoagenda');
+  cpRetryPending();
+};
+window.cpAaCalc=async function(){
+  const cfg=readCfg(); saveCfg(cfg);
+  const prev=document.getElementById('aa-prev');
+  document.getElementById('aa-cfg').style.display='none';
+  prev.style.display='block'; prev.innerHTML='<div class="aa-sum">⏳ Revisando la agenda actual y calculando rutas…</div>';
+  setActions('<div class="bcancel" onclick="closeModal(\'autoagenda\')">Cancelar</div>');
+  // traer lo que ya existe en la nube (evita duplicar y detecta el día habitual)
+  try{
+    const from=dkey(addDays(cfg.start,-28)), to=dkey(addDays(cfg.start,cfg.weeks*7));
+    await Promise.race([syncTrabajosForRange(from,to),new Promise(r=>setTimeout(r,6000))]);
+  }catch(e){}
+  try{ await refreshUsersCache(); }catch(e){}
+  PROP=buildProposal(cfg);
+  renderProposal();
+};
+function crewLabel(crew){ if(!crew) return 'Sin responsable'; const r=resolveAssign(crew); return r.label||'Responsable'; }
+function renderProposal(){
+  const P=PROP, prev=document.getElementById('aa-prev');
+  const act=P.days.filter(d=>d.on);
+  const visits=act.reduce((a,d)=>a+dayStops(d),0);
+  const km=act.reduce((a,d)=>a+dayKm(d),0);
+  const st=P.stats, endLim=toMin(P.cfg.endTime);
+  let sum=`<div class="aa-sum"><b>${visits} visitas</b> en <b>${act.length} días</b> · ~${km.toFixed(0)} km de ruta<br>`+
+    `${st.clients} clientes con plan activo`+
+    (st.covered?` · ${st.covered} ya tenían visita esas semanas (no se tocan)`:'')+
+    (st.skipNone?` · ${st.skipNone} sin repetición (a pedido)`:'')+
+    (st.noGps?`<br><span class="aa-warn">⚠ ${st.noGps} sin ubicación GPS: van al final del día sin optimizar</span>`:'')+
+    (st.overDays?`<br><span class="aa-warn">⚠ ${st.overDays} días pasan de las ${P.cfg.endTime}: con esa carga no alcanza un solo equipo. Asigná responsables en el plan de los clientes, sumá días de trabajo o sacá visitas con ✕.</span>`:'')+`</div>`;
+  if(!P.days.length) sum+='<div class="agenda-empty">No hay visitas nuevas para generar en ese período. Revisá el plan de los clientes (frecuencia y día) o ampliá las semanas.</div>';
+  const html=P.days.map((d,i)=>{
+    const over=dayEnd(d)>endLim;
+    const rows=d.crews.map(c=>
+      (st.multiCrew?`<div class="aa-stop" style="background:var(--pdim);font-weight:800;color:var(--c6)">${esc(crewLabel(c.crew))} · ${c.stops.length} visitas · ${c.lay.km.toFixed(0)} km</div>`:'')+
+      c.lay.stops.map(s=>`<div class="aa-stop"><span class="t">${fmt(s.start)}–${fmt(s.end)}</span><span class="n">${esc(s.c.n)}</span>`+
+        `<span class="z">${s.p.time?'⚓ ':''}${s.clash?'<span class="aa-warn">⚠ se pisa </span>':''}${hasGps(s.c)?'':'⚠ '}${esc(s.c.zone||'')}</span><span class="x" onclick="cpAaRemove(${i},${s.c.id})">✕</span></div>`).join('')
+    ).join('');
+    return `<details class="aa-day${d.on?'':' off'}"><summary><input type="checkbox" ${d.on?'checked':''} onclick="event.stopPropagation();cpAaToggle(${i})" style="margin:0">`+
+      `<span style="text-transform:capitalize">${dayLabel(d.key)}</span>`+
+      `<span class="aa-day-meta">${dayStops(d)} visitas${over?' <span class="aa-warn">⚠ pasa de la jornada</span>':''}<br>${dayKm(d).toFixed(0)} km · hasta ${fmt(dayEnd(d))}</span></summary>${rows}</details>`;
+  }).join('');
+  prev.innerHTML=sum+html;
+  setActions(`<div class="bcancel" onclick="cpAaBack()">← Ajustar</div><div class="bconfirm" onclick="cpAaCommit()" ${visits?'':'style="opacity:.4;pointer-events:none"'}>Agendar ${visits} visitas ✓</div>`);
+}
+window.cpAaBack=showCfg;
+window.cpAaToggle=function(i){ PROP.days[i].on=!PROP.days[i].on; renderProposal(); };
+window.cpAaRemove=function(i,clientId){
+  const d=PROP.days[i];
+  d.crews.forEach(c=>{ c.stops=c.stops.filter(x=>x.c.id!==clientId); c.lay=layoutDay(c.stops,PROP.cfg); });
+  d.crews=d.crews.filter(c=>c.stops.length);
+  if(!d.crews.length) PROP.days.splice(i,1);
+  renderProposal();
+};
+
+// ── guardar ──
+function resolveAssign(val){
+  let ids=[],label='';
+  if(val&&val.startsWith('user:')){ const uid=val.slice(5); ids=[uid]; const u=(_loginUsersCache||[]).find(x=>x.id===uid); label=u?'👤 '+u.nombre:''; }
+  else if(val&&val.startsWith('group:')){ const g=grupos.find(x=>x.id===val.slice(6)); if(g){ids=g.members||[];label='🏷 '+g.nombre;} }
+  return {ids,label};
+}
+async function uploadJob(job,key,ids){
+  await saveTrabajoToSupabase(job,key);
+  if(job._lid&&_pendingDeleteLid.has(job._lid)){
+    _pendingDeleteLid.delete(job._lid);
+    try{ await sb.from('asignaciones').delete().eq('trabajo_id',job.supabase_id); await sb.from('trabajos').delete().eq('id',job.supabase_id); }catch(e){}
+    return;
+  }
+  if(ids.length&&job.supabase_id){
+    await Promise.all(ids.map(uid=>sb.from('asignaciones').insert({trabajo_id:job.supabase_id,user_id:uid})));
+    job.asignaciones=ids.map(uid=>({user_id:uid}));
+  }
+}
+async function pool(items,n,fn){
+  let i=0; const run=async()=>{ while(i<items.length){ const it=items[i++]; await fn(it); } };
+  await Promise.all(Array.from({length:n},run));
+}
+window.cpAaCommit=async function(){
+  const act=PROP.days.filter(d=>d.on);
+  const queue=[]; const recIds={};
+  act.forEach(d=>{
+    if(!schedule[d.key]) schedule[d.key]=[];
+    d.crews.flatMap(c=>c.lay.stops).forEach(s=>{
+      if(schedule[d.key].some(e=>e.clientId===s.c.id)) return;
+      const a=resolveAssign(s.p.assign);
+      recIds[s.c.id]=recIds[s.c.id]||('auto-'+s.c.id+'-'+Date.now());
+      const job={clientId:s.c.id,time:fmt(s.start),endTime:fmt(s.end),notes:'',status:'pend',recurrenceId:recIds[s.c.id],
+        assignVal:s.p.assign||'',assignLabel:a.label,asignaciones:a.ids.map(uid=>({user_id:uid})),_lid:_nextJobLid++,_auto:true};
+      schedule[d.key].push(job);
+      queue.push({job,key:d.key,ids:a.ids});
+    });
+  });
+  closeModal('autoagenda');
+  renderToday(); renderRoute();
+  if(document.getElementById('pg-agenda').classList.contains('on')) renderCalendar();
+  if(typeof mapInit!=='undefined'&&mapInit) renderMarkers(clients.filter(c=>!c.deleted));
+  dbSaveAndRefresh(); dbSaveNow();
+  toast('✓ '+queue.length+' visitas agendadas — subiendo a la nube…');
+  let ok=0,fail=0;
+  await pool(queue,4,async it=>{ try{ await uploadJob(it.job,it.key,it.ids); ok++; }catch(e){ fail++; console.warn('[AutoAgenda] subida:',e); } });
+  dbSave();
+  toast(fail?('⚠ '+ok+' subidas, '+fail+' pendientes: se reintentan solas al volver la conexión'):('✓ '+ok+' visitas guardadas en la nube'));
+};
+
+// reintento de visitas generadas que no llegaron a subirse
+let retrying=false;
+window.cpRetryPending=async function(){
+  if(retrying||!navigator.onLine||!currentUser||currentUser.rol==='empleado') return;
+  retrying=true;
+  try{
+    const items=[];
+    Object.keys(schedule).filter(k=>k>=TODAY_KEY).forEach(k=>(schedule[k]||[]).forEach(j=>{ if(j._auto&&!j.supabase_id) items.push({job:j,key:k,ids:(j.asignaciones||[]).map(a=>a.user_id)}); }));
+    if(!items.length) return;
+    let ok=0;
+    await pool(items,4,async it=>{ try{ await uploadJob(it.job,it.key,it.ids); ok++; }catch(e){} });
+    if(ok){ dbSave(); toast('✓ '+ok+' visitas pendientes subidas'); }
+  } finally { retrying=false; }
+};
+window.addEventListener('online',()=>setTimeout(cpRetryPending,1500));
+
+// botón en Agenda: solo para quien puede crear tareas
+function syncCta(){ const el=document.getElementById('cp-auto-cta'); if(el) el.style.display=(typeof canCreateTasks==='function'&&currentUser&&canCreateTasks())?'block':'none'; }
+const _showPage=window.showPage;
+if(typeof _showPage==='function'){ window.showPage=function(){ const r=_showPage.apply(this,arguments); try{syncCta();}catch(e){} return r; }; }
+})();
+
 </script>
 </body>
 </html>
