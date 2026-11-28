@@ -5269,9 +5269,12 @@ async function runSyncQueueItem(item){
     const cl = getClientById(item.payload.clientId);
     if(!cl) return; // cliente ya no existe
     await saveClienteToSupabase(cl);
+  } else if(item.type==='job_price'){
+    const {error} = await sb.from('trabajos').update({precio:item.payload.precio}).eq('id',item.payload.supabaseId);
+    if(error) throw error;
   } else if(item.type==='reschedule'){
-    const {supabaseId,newDate,newTime} = item.payload;
-    const {error} = await sb.from('trabajos').update({fecha:newDate,hora_inicio:newTime}).eq('id',supabaseId);
+    const {supabaseId,newDate,newTime,newEnd} = item.payload;
+    const {error} = await sb.from('trabajos').update(Object.assign({fecha:newDate,hora_inicio:newTime},newEnd!=null?{hora_fin:newEnd}:{})).eq('id',supabaseId);
     if(error) throw error;
   } else if(item.type==='save_transaccion'){
     const t = transactions.find(x=>x.id===item.payload.transId);
@@ -7594,17 +7597,17 @@ function exportToGoogleCalendar(dateKey){
       </div>
     </div>
     <div class="mfield">
-      <div class="mlabel">Precio mensual ($)</div>
+      <div class="mlabel">Valor de la visita ($)</div>
       <input class="minput" id="nc-precio" type="number" placeholder="Ej: 25000">
     </div>
     <div class="mfield" id="nc-plan-box" style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--pdim)">
       <div class="mlabel" style="color:var(--c6)">🗓 Plan de visitas (para generar la agenda automática)</div>
       <div style="display:flex;gap:8px;margin-top:6px">
-        <select class="minput" id="nc-plan-freq" title="Frecuencia">
+        <select class="minput" id="nc-plan-freq" title="Frecuencia" onchange="cpPlanFreqChange()">
           <option value="">Sin plan de mantenimiento</option>
           <option value="weekly">Semanal</option>
           <option value="biweekly">Cada 15 días</option>
-          <option value="monthly">Cada 4 semanas</option>
+          <option value="monthly">Mensual (cada 4 semanas)</option>
           <option value="none">Sin repetición (solo a pedido)</option>
         </select>
         <select class="minput" id="nc-plan-dow" title="Día de la semana">
@@ -8107,7 +8110,8 @@ wrap.innerHTML=`
         <div class="mfield" style="flex:1"><div class="mlabel">Jornada hasta</div><input class="minput" id="aa-end" type="time" value="18:00"></div>
       </div>
       <div class="mfield"><div class="mlabel">Días de trabajo</div><div class="aa-chips" id="aa-days"></div></div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 12px"><input type="checkbox" id="aa-lunch" checked style="margin:0"> Pausa de almuerzo 13:00–14:00</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 8px"><input type="checkbox" id="aa-lunch" checked style="margin:0"> Pausa de almuerzo 13:00–14:00</label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 12px"><input type="checkbox" id="aa-reorg" checked style="margin:3px 0 0"><span><b style="color:var(--c6)">Reorganizar también los mantenimientos ya agendados</b><br><span style="font-size:11px;color:var(--text3)">Las visitas pendientes de esas semanas se mueven al día que les toca según su zona y se reordenan por ruta. Las ya realizadas o en curso no se tocan.</span></span></label>
       <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Usa la bandeja de mantenimientos y el planificador por día (día, frecuencia, inicio, orden, responsable). Lo que no tenga día fijo se agrupa por zona y se reparte parejo según el tiempo de la jornada; cada responsable se calcula por separado. Antes de guardar vas a ver la propuesta completa y podés ajustarla.</div>
     </div>
     <div id="aa-prev" style="display:none"></div>
@@ -8181,11 +8185,12 @@ function loadCfg(){
     if(c.time) document.getElementById('aa-time').value=c.time;
     if(c.weeks) document.getElementById('aa-weeks').value=c.weeks;
     if(typeof c.lunch==='boolean') document.getElementById('aa-lunch').checked=c.lunch;
+    if(typeof c.reorg==='boolean') document.getElementById('aa-reorg').checked=c.reorg;
     if(Array.isArray(c.days)&&c.days.length) cfgDays=new Set(c.days);
   }catch(e){}
 }
 function saveCfg(cfg){
-  try{localStorage.setItem(CFG_KEY,JSON.stringify({endTime:cfg.endTime,time:cfg.startTime,weeks:cfg.weeks,lunch:cfg.lunch,days:[...cfg.days]}));}catch(e){}
+  try{localStorage.setItem(CFG_KEY,JSON.stringify({reorg:cfg.reorg,endTime:cfg.endTime,time:cfg.startTime,weeks:cfg.weeks,lunch:cfg.lunch,days:[...cfg.days]}));}catch(e){}
 }
 function renderDayChips(){
   document.getElementById('aa-days').innerHTML=[1,2,3,4,5,6,0].map(d=>
@@ -8199,6 +8204,7 @@ function readCfg(){
     endTime:document.getElementById('aa-end').value||'18:00',
     startTime:document.getElementById('aa-time').value||'09:00',
     lunch:document.getElementById('aa-lunch').checked,
+    reorg:document.getElementById('aa-reorg').checked,
     days:new Set(cfgDays)
   };
 }
@@ -8280,9 +8286,10 @@ function lastJobDate(c,uptoKey){
   }
   return best?pk(best):null;
 }
-function weekHasJob(c,d){
+// relSet: visitas "liberadas" (pendientes que se van a reubicar): no cuentan como ya cubierta la semana
+function weekHasJob(c,d,relSet){
   const m=mondayOf(d);
-  for(let i=0;i<7;i++){ const k=dkey(addDays(m,i)); if((schedule[k]||[]).some(e=>e.clientId===c.id)) return true; }
+  for(let i=0;i<7;i++){ const k=dkey(addDays(m,i)); if((schedule[k]||[]).some(e=>e.clientId===c.id&&!(relSet&&relSet.has(e)))) return true; }
   return false;
 }
 function angleSort(list){
@@ -8294,17 +8301,45 @@ function angleSort(list){
   return g.concat(ng);
 }
 function buildProposal(cfg){
-  const end=addDays(cfg.start,cfg.weeks*7-1), endKey=dkey(end);
+  // semanas completas: el período se extiende hasta el domingo, así ninguna zona queda reorganizada a medias
+  const end0=addDays(cfg.start,cfg.weeks*7-1), end=addDays(end0,(7-end0.getDay())%7), endKey=dkey(end);
   const stats={skipNone:0,covered:0,noGps:0,clients:0};
   const capMin=Math.max(60,(toMin(cfg.endTime)-toMin(cfg.startTime))-(cfg.lunch?60:0));
   const elig=[];
+  const startKey=dkey(cfg.start), reorg=!!cfg.reorg;
+  // Visitas pendientes ya agendadas que se pueden reubicar: de la bandeja, en la ventana, después de hoy,
+  // y que ya estén en la nube (o sean de la agenda automática sin subir todavía).
+  const relSet=new Set(), rel={}; // rel[clientId][lunesDeLaSemana] = {job,key}
+  stats.moved=0; stats.retimed=0; stats.leftover=0; stats.newCount=0;
+  if(reorg){
+    Object.keys(schedule).sort().forEach(key=>{
+      if(key<startKey||key>endKey||key<=TODAY_KEY) return;
+      (schedule[key]||[]).forEach(j=>{
+        if(j.status!=='pend'||!(j.supabase_id||j._auto)) return;
+        const c=getClientById(j.clientId);
+        if(!c||c.deleted||c.status!=='activo'||cpResolvePlan(c).freq==='none') return;
+        const wk=dkey(mondayOf(pk(key)));
+        const slot=(rel[c.id]=rel[c.id]||{});
+        if(slot[wk]){ stats.leftover++; return; } // segunda visita de la misma semana: queda como está
+        slot[wk]={job:j,key}; relSet.add(j);
+      });
+    });
+  }
   clients.forEach(c=>{
     if(c.deleted||c.status!=='activo') return;
     const p=cpResolvePlan(c);
     if(p.freq==='none'){stats.skipNone++;return;} // fuera de la bandeja
     const period=PERIOD[p.freq]||1;
     const sd=p.start?pk(p.start):null;
-    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor:lastJobDate(c,endKey)||sd,sd,dow:null,phase:0});
+    let anchor;
+    if(reorg){
+      // el ritmo (quincenal, 4 semanas) se conserva: se ancla a la última visita anterior al período,
+      // o si no hay, a la primera visita pendiente ya agendada
+      anchor=lastJobDate(c,dkey(addDays(cfg.start,-1)));
+      if(!anchor){ const ks=Object.values(rel[c.id]||{}).map(r=>r.key).sort(); if(ks.length) anchor=pk(ks[0]); }
+      anchor=anchor||sd;
+    } else anchor=lastJobDate(c,endKey)||sd;
+    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor,sd,dow:null,phase:0});
   });
   // carga (minutos por semana) por responsable y día
   const loads={};
@@ -8312,7 +8347,7 @@ function buildProposal(cfg){
   const auto=[];
   elig.forEach(x=>{
     if(x.p.dow!=null) x.dow=x.p.dow;
-    else if(x.anchor&&cfg.days.has(x.anchor.getDay())) x.dow=x.anchor.getDay();
+    else if(!reorg&&x.anchor&&cfg.days.has(x.anchor.getDay())) x.dow=x.anchor.getDay();
     if(x.dow!=null){ const l=L(x.crew); l[x.dow]=(l[x.dow]||0)+x.w; } else auto.push(x);
   });
   const minDay=crew=>{const l=L(crew);return [...cfg.days].sort((a,b)=>(l[a]-l[b])||(a-b))[0];};
@@ -8349,16 +8384,21 @@ function buildProposal(cfg){
       const wk=x.anchor?weeksBetween(x.anchor,d):weeksBetween(cfg.start,d);
       const m=((wk%x.period)+x.period)%x.period;
       if(x.anchor?m!==0:m!==x.phase) continue;
-      if(weekHasJob(x.c,d)){coveredHit=true;continue;}
-      const key=dkey(d); (byDate[key]=byDate[key]||[]).push(x); any=true;
+      if(weekHasJob(x.c,d,relSet)){coveredHit=true;continue;}
+      const key=dkey(d);
+      const r=reorg&&rel[x.c.id]&&rel[x.c.id][dkey(mondayOf(d))];
+      if(r) r.used=true;
+      (byDate[key]=byDate[key]||[]).push(r?Object.assign({},x,{job:r.job,fromKey:r.key}):x); any=true;
     }
     if(!any&&coveredHit) stats.covered++;
   });
+  // visitas liberadas que no encontraron lugar (ej. el cliente pasó a quincenal): quedan como estaban
+  Object.values(rel).forEach(w=>Object.values(w).forEach(r=>{ if(!r.used) stats.leftover++; }));
   const days=Object.keys(byDate).sort().map(key=>makeDay(key,byDate[key],cfg));
   const crews=new Set(); days.forEach(d=>d.crews.forEach(c=>crews.add(c.crew)));
   stats.multiCrew=crews.size>1;
   stats.overDays=days.filter(d=>d.crews.some(c=>c.lay.endMin>toMin(cfg.endTime))).length;
-  return {days,stats,cfg};
+  return {days,stats,cfg,end};
 }
 function makeDay(key,stops,cfg){
   const by={}; stops.forEach(x=>(by[x.crew]=by[x.crew]||[]).push(x));
@@ -8392,13 +8432,14 @@ window.cpAaCalc=async function(){
   setActions('<div class="bcancel" onclick="closeModal(\'autoagenda\')">Cancelar</div>');
   // traer lo que ya existe en la nube (evita duplicar y detecta el día habitual)
   try{
-    const from=dkey(addDays(cfg.start,-28)), to=dkey(addDays(cfg.start,cfg.weeks*7));
+    const from=dkey(addDays(cfg.start,-28)), to=dkey(addDays(cfg.start,cfg.weeks*7+7));
     await Promise.race([syncTrabajosForRange(from,to),new Promise(r=>setTimeout(r,6000))]);
   }catch(e){}
   try{ await refreshUsersCache(); }catch(e){}
   PROP=buildProposal(cfg);
   renderProposal();
 };
+const fromLbl=k=>{const d=pk(k);return d.getDate()+' '+MONTHN[d.getMonth()];};
 function crewLabel(crew){ if(!crew) return 'Sin responsable'; const r=resolveAssign(crew); return r.label||'Responsable'; }
 function renderProposal(){
   const P=PROP, prev=document.getElementById('aa-prev');
@@ -8406,26 +8447,36 @@ function renderProposal(){
   const visits=act.reduce((a,d)=>a+dayStops(d),0);
   const km=act.reduce((a,d)=>a+dayKm(d),0);
   const st=P.stats, endLim=toMin(P.cfg.endTime);
-  let sum=`<div class="aa-sum"><b>${visits} visitas</b> en <b>${act.length} días</b> · ~${km.toFixed(0)} km de ruta<br>`+
+  let nNew=0,nMoved=0,nRetimed=0,nSame=0;
+  act.forEach(d=>d.crews.forEach(c=>c.lay.stops.forEach(s=>{
+    if(!s.job) nNew++;
+    else if(s.fromKey!==d.key) nMoved++;
+    else if(s.job.time!==fmt(s.start)||s.job.endTime!==fmt(s.end)) nRetimed++;
+    else nSame++;
+  })));
+  P.counts={nNew,nMoved,nRetimed,nSame};
+  let sum=`<div class="aa-sum">${fromLbl(dkey(P.cfg.start))} → ${fromLbl(dkey(P.end))} · <b>${visits} visitas</b> en <b>${act.length} días</b> · ~${km.toFixed(0)} km de ruta<br>`+
+    (P.cfg.reorg?`<b>${nNew}</b> nuevas · <b>${nMoved}</b> cambian de día · <b>${nRetimed}</b> cambian de horario · ${nSame} sin cambios<br>`:'')+
     `${st.clients} clientes con plan activo`+
-    (st.covered?` · ${st.covered} ya tenían visita esas semanas (no se tocan)`:'')+
+    (st.covered?(P.cfg.reorg?` · ${st.covered} ya tienen visita realizada o en curso esas semanas (no se tocan)`:` · ${st.covered} ya tenían visita esas semanas (no se tocan)`):'')+
+    (st.leftover?`<br><span class="aa-warn">⚠ ${st.leftover} visita(s) pendiente(s) no encajan en el plan (ej. repetidas en la misma semana) y quedan como estaban</span>`:'')+
     (st.skipNone?` · ${st.skipNone} activos fuera de la bandeja (no se agendan)`:'')+
     (st.noGps?`<br><span class="aa-warn">⚠ ${st.noGps} sin ubicación GPS: van al final del día sin optimizar</span>`:'')+
     (st.overDays?`<br><span class="aa-warn">⚠ ${st.overDays} días pasan de las ${P.cfg.endTime}: con esa carga no alcanza un solo equipo. Asigná responsables en el plan de los clientes, sumá días de trabajo o sacá visitas con ✕.</span>`:'')+`</div>`;
-  if(!P.days.length) sum+='<div class="agenda-empty">No hay visitas nuevas para generar en ese período. Revisá el plan de los clientes (frecuencia y día) o ampliá las semanas.</div>';
+  if(!P.days.length) sum+='<div class="agenda-empty">No hay visitas para generar ni reorganizar en ese período. Revisá el plan de los clientes (frecuencia y día) o ampliá las semanas.</div>';
   const html=P.days.map((d,i)=>{
     const over=dayEnd(d)>endLim;
     const rows=d.crews.map(c=>
       (st.multiCrew?`<div class="aa-stop" style="background:var(--pdim);font-weight:800;color:var(--c6)">${esc(crewLabel(c.crew))} · ${c.stops.length} visitas · ${c.lay.km.toFixed(0)} km</div>`:'')+
       c.lay.stops.map(s=>`<div class="aa-stop"><span class="t">${fmt(s.start)}–${fmt(s.end)}</span><span class="n">${esc(s.c.n)}</span>`+
-        `<span class="z">${s.p.time?'⚓ ':''}${s.clash?'<span class="aa-warn">⚠ se pisa </span>':''}${hasGps(s.c)?'':'⚠ '}${esc(s.c.zone||'')}</span><span class="x" onclick="cpAaRemove(${i},${s.c.id})">✕</span></div>`).join('')
+        `<span class="z">${s.job&&s.fromKey!==d.key?'<span style="color:var(--c6);font-weight:800">↪ desde '+fromLbl(s.fromKey)+'</span> ':''}${s.p.time?'⚓ ':''}${s.clash?'<span class="aa-warn">⚠ se pisa </span>':''}${hasGps(s.c)?'':'⚠ '}${esc(s.c.zone||'')}</span><span class="x" onclick="cpAaRemove(${i},${s.c.id})">✕</span></div>`).join('')
     ).join('');
     return `<details class="aa-day${d.on?'':' off'}"><summary><input type="checkbox" ${d.on?'checked':''} onclick="event.stopPropagation();cpAaToggle(${i})" style="margin:0">`+
       `<span style="text-transform:capitalize">${dayLabel(d.key)}</span>`+
       `<span class="aa-day-meta">${dayStops(d)} visitas${over?' <span class="aa-warn">⚠ pasa de la jornada</span>':''}<br>${dayKm(d).toFixed(0)} km · hasta ${fmt(dayEnd(d))}</span></summary>${rows}</details>`;
   }).join('');
   prev.innerHTML=sum+html;
-  setActions(`<div class="bcancel" onclick="cpAaBack()">← Ajustar</div><div class="bconfirm" onclick="cpAaCommit()" ${visits?'':'style="opacity:.4;pointer-events:none"'}>Agendar ${visits} visitas ✓</div>`);
+  setActions(`<div class="bcancel" onclick="cpAaBack()">← Ajustar</div><div class="bconfirm" onclick="cpAaCommit()" ${(nNew+nMoved+nRetimed)?'':'style="opacity:.4;pointer-events:none"'}>${P.cfg.reorg?`Aplicar (${nNew} nuevas · ${nMoved+nRetimed} reorganizadas) ✓`:`Agendar ${visits} visitas ✓`}</div>`);
 }
 window.cpAaBack=showCfg;
 window.cpAaToggle=function(i){ PROP.days[i].on=!PROP.days[i].on; renderProposal(); };
@@ -8462,29 +8513,60 @@ async function pool(items,n,fn){
 }
 window.cpAaCommit=async function(){
   const act=PROP.days.filter(d=>d.on);
-  const queue=[]; const recIds={};
+  const queue=[], moves=[]; const recIds={}; const touched=new Set();
   act.forEach(d=>{
     if(!schedule[d.key]) schedule[d.key]=[];
     d.crews.flatMap(c=>c.lay.stops).forEach(s=>{
+      const t0=fmt(s.start), t1=fmt(s.end);
+      if(s.job){
+        // visita ya agendada: se MUEVE / re-horaria (no se duplica)
+        const j=s.job, from=s.fromKey;
+        if(from===d.key&&j.time===t0&&j.endTime===t1) return; // sin cambios
+        const arr=schedule[from]||[], i=arr.indexOf(j);
+        if(i<0) return; // ya no está (cambió por sincronización): se omite
+        if(from!==d.key){ arr.splice(i,1); schedule[d.key].push(j); }
+        j.time=t0; j.endTime=t1; j._moved=true;
+        touched.add(from); touched.add(d.key);
+        if(j.supabase_id){ moves.push({j,from,to:d.key}); if(from!==d.key) _borrandoAhora.add(j.supabase_id); }
+        else if(j._auto && !j.supabase_id) queue.push({job:j,key:d.key,ids:(j.asignaciones||[]).map(a=>a.user_id)}); // todavía sin subir: sube con la fecha nueva
+        return;
+      }
       if(schedule[d.key].some(e=>e.clientId===s.c.id)) return;
       const a=resolveAssign(s.p.assign);
       recIds[s.c.id]=recIds[s.c.id]||('auto-'+s.c.id+'-'+Date.now());
-      const job={clientId:s.c.id,time:fmt(s.start),endTime:fmt(s.end),notes:'',status:'pend',recurrenceId:recIds[s.c.id],
+      const job={clientId:s.c.id,time:t0,endTime:t1,notes:'',status:'pend',recurrenceId:recIds[s.c.id],
         assignVal:s.p.assign||'',assignLabel:a.label,asignaciones:a.ids.map(uid=>({user_id:uid})),_lid:_nextJobLid++,_auto:true};
       schedule[d.key].push(job);
       queue.push({job,key:d.key,ids:a.ids});
     });
   });
+  // el orden manual de la pantalla Ruta quedó viejo en los días que cambiaron
+  try{ if(typeof manualOrders!=='undefined'){ touched.forEach(k=>{ delete manualOrders[k]; }); if(typeof saveManualOrders==='function') saveManualOrders(); } }catch(e){}
   closeModal('autoagenda');
   renderToday(); renderRoute();
   if(document.getElementById('pg-agenda').classList.contains('on')) renderCalendar();
   if(typeof mapInit!=='undefined'&&mapInit) renderMarkers(clients.filter(c=>!c.deleted));
   dbSaveAndRefresh(); dbSaveNow();
-  toast('✓ '+queue.length+' visitas agendadas — subiendo a la nube…');
-  let ok=0,fail=0;
+  const nNew=queue.filter(q=>!q.job._moved).length;
+  toast('✓ '+nNew+' nuevas'+(moves.length||queue.length-nNew?' · '+(moves.length+queue.length-nNew)+' reorganizadas':'')+' — guardando en la nube…');
+  let ok=0,fail=0,mok=0,mfail=0;
   await pool(queue,4,async it=>{ try{ await uploadJob(it.job,it.key,it.ids); ok++; }catch(e){ fail++; console.warn('[AutoAgenda] subida:',e); } });
+  await pool(moves,4,async m=>{
+    const {j,to}=m;
+    try{
+      const {error}=await sb.from('trabajos').update({fecha:to,hora_inicio:j.time||'',hora_fin:j.endTime||'',updated_at:new Date().toISOString()}).eq('id',j.supabase_id);
+      if(error) throw error;
+      mok++;
+    }catch(e){
+      mfail++; console.warn('[AutoAgenda] mover:',e);
+      queueSync('reschedule',{supabaseId:j.supabase_id,newDate:to,newTime:j.time||'',newEnd:j.endTime||''});
+    }finally{ _borrandoAhora.delete(j.supabase_id); delete j._moved; }
+  });
+  queue.forEach(q=>{ delete q.job._moved; });
   dbSave();
-  toast(fail?('⚠ '+ok+' subidas, '+fail+' pendientes: se reintentan solas al volver la conexión'):('✓ '+ok+' visitas guardadas en la nube'));
+  // con todo confirmado en la nube, se refresca para que quede igual en todos los dispositivos
+  if(moves.length&&!mfail){ try{ await syncTrabajosForRange(dkey(PROP.cfg.start),dkey(addDays(PROP.cfg.start,PROP.cfg.weeks*7+7))); renderToday(); renderRoute(); if(document.getElementById('pg-agenda').classList.contains('on')) renderCalendar(); }catch(e){} }
+  toast((fail||mfail)?('⚠ '+(ok+mok)+' guardadas, '+(fail+mfail)+' pendientes: se reintentan solas al volver la conexión'):('✓ '+(ok+mok)+' cambios guardados en la nube'));
 };
 
 // reintento de visitas generadas que no llegaron a subirse
@@ -8509,7 +8591,6 @@ function syncCta(){ const el=document.getElementById('cp-auto-cta'); if(el) el.s
 const _showPage=window.showPage;
 if(typeof _showPage==='function'){ window.showPage=function(){ const r=_showPage.apply(this,arguments); try{syncCta();}catch(e){} return r; }; }
 })();
-
 </script>
 <script>
 // ════════════════════════════════════════════════════════════
@@ -8526,7 +8607,35 @@ if(typeof _showPage==='function'){ window.showPage=function(){ const r=_showPage
 const DOWN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const DOWF=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
 const MON=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-const FREQ={weekly:'Semanal',biweekly:'Cada 15 días',monthly:'Cada 4 semanas'};
+const FREQ={weekly:'Semanal',biweekly:'Cada 15 días',monthly:'Mensual'};
+// Valor por defecto de la visita según la frecuencia del mantenimiento
+const FREQ_PRICE={weekly:20000,biweekly:25000,monthly:30000};
+const money=n=>'$'+Number(n||0).toLocaleString('es-AR');
+const priceMismatch=()=>clients.filter(c=>inBox(c)&&c.price!==FREQ_PRICE[c.plan.freq]);
+// Cambia el valor del cliente y, en las visitas PENDIENTES futuras que todavía tenían el valor
+// anterior (no editado a mano), también. Devuelve las visitas ya subidas a la nube que cambiaron.
+function applyPrice(c){
+  const np=FREQ_PRICE[c.plan&&c.plan.freq]; if(np==null||c.price===np) return [];
+  const old=c.price; c.price=np; persist(c);
+  const jobs=[];
+  Object.keys(schedule).filter(k=>k>TODAY_KEY).forEach(k=>(schedule[k]||[]).forEach(j=>{
+    if(j.clientId!==c.id||j.status!=='pend'||j.price==null||j.price!==old) return;
+    j.price=np; if(j.supabase_id) jobs.push(j);
+  }));
+  return jobs;
+}
+async function uploadJobPrices(jobs){
+  let fail=0, i=0;
+  const run=async()=>{ while(i<jobs.length){ const j=jobs[i++];
+    try{ const {error}=await sb.from('trabajos').update({precio:j.price}).eq('id',j.supabase_id); if(error) throw error; }
+    catch(e){ fail++; queueSync('job_price',{supabaseId:j.supabase_id,precio:j.price}); } } };
+  await Promise.all([run(),run(),run(),run()]);
+  return fail;
+}
+window.cpPlanFreqChange=function(){
+  const f=(document.getElementById('nc-plan-freq')||{}).value, pr=document.getElementById('nc-precio');
+  if(pr&&FREQ_PRICE[f]!=null) pr.value=FREQ_PRICE[f];
+};
 const ZONES=['Capital','Rawson','Pocito','Rivadavia','Santa Lucía','Caucete','9 de Julio'];
 const MT={tab:'box',zone:'',onlyNoDay:false,day:1};
 const hasGps=c=>validCoord(c.lat,c.lng);
@@ -8622,12 +8731,15 @@ window.cpMantSave=function(){
     c=getClientById(id);
   }
   const start=document.getElementById('mm-start').value||'';
+  const prevFreq=inBox(c)?c.plan.freq:null;
   setPlan(c,{freq:MM.freq,start,plus:MM.plus});
+  let jobsRep=[]; if(prevFreq!==MM.freq) jobsRep=applyPrice(c); // nuevo en la bandeja o cambió la frecuencia: valor por defecto
+  if(jobsRep.length) uploadJobPrices(jobsRep);
   if(!/mant/i.test(c.service||'')) c.service=MM.freq==='biweekly'?'Mant. quincenal':'Mant. semanal';
   closeModal('mant');
   try{ filterClients(); refreshClientDatalist(); }catch(e){}
   cpMantRender();
-  toast('✓ '+c.n+' en la bandeja'+(MM.plus?' ★':''));
+  toast('✓ '+c.n+' en la bandeja · '+money(c.price)+' por visita'+(MM.plus?' ★':''));
 };
 window.cpMantRemove=function(){
   const c=getClientById(MM.editId); if(!c)return;
@@ -8646,7 +8758,7 @@ window.cpMantRender=function(){
 
 function rowChips(c){
   const p=c.plan||{}, d=dowOf(c);
-  return `<span class="aa-chip" style="padding:2px 8px;font-size:10px;cursor:default">${FREQ[p.freq]}</span>`+
+  return `<span class="aa-chip" style="padding:2px 8px;font-size:10px;cursor:default">${FREQ[p.freq]} · <b${c.price!==FREQ_PRICE[p.freq]?' style="color:#e8a33d"':''}>${money(c.price)}</b></span>`+
     (p.start?`<span style="font-size:10px;color:var(--text3)">desde ${fdate(p.start)}</span>`:'')+
     (d!=null?`<span class="aa-chip on" style="padding:2px 8px;font-size:10px;cursor:default">${DOWN[d]}</span>`:'<span style="font-size:10px;color:#e8a33d;font-weight:800">sin día</span>');
 }
@@ -8657,6 +8769,10 @@ function boxHtml(){
   let list=all.filter(c=>(!MT.zone||(c.zone||'—')===MT.zone)&&(!MT.onlyNoDay||dowOf(c)==null));
   const noDay=all.filter(c=>dowOf(c)==null).length, plus=all.filter(cpIsPlus).length;
   let h=`<div class="aa-sum"><b>${all.length}</b> en la bandeja · <b>${noDay}</b> sin día asignado · <span class="plus-gold"><b>${plus}</b> Plus</span></div>`;
+  const mis=priceMismatch();
+  h+=`<div class="aa-sum" style="display:flex;align-items:center;gap:10px"><span style="flex:1">Valor por visita: Semanal <b>${money(FREQ_PRICE.weekly)}</b> · 15 días <b>${money(FREQ_PRICE.biweekly)}</b> · Mensual <b>${money(FREQ_PRICE.monthly)}</b>`+
+    (mis.length?`<br><span class="aa-warn">${mis.length} cliente(s) tienen otro valor</span>`:'')+`</span>`+
+    (mis.length?`<div class="aa-chip on" onclick="cpMantPrices()">Actualizar</div>`:'')+`</div>`;
   if(cand.length) h+=`<div class="aa-sum" style="display:flex;align-items:center;gap:10px"><span style="flex:1">Hay <b>${cand.length}</b> clientes activos con servicio de mantenimiento que todavía no están en la bandeja.</span><div class="aa-chip on" onclick="cpMantImport()">Importar</div></div>`;
   h+=`<div class="aa-chips" style="margin-bottom:10px"><div class="aa-chip${MT.zone?'':' on'}" onclick="cpMantZone('')">Todas</div>`+
     zones.map(z=>`<div class="aa-chip${MT.zone===z?' on':''}" onclick="cpMantZone('${esc(z).replace(/'/g,'&#39;')}')">${esc(z)}</div>`).join('')+
@@ -8675,12 +8791,23 @@ function boxHtml(){
 }
 window.cpMantZone=z=>{MT.zone=z;cpMantRender();};
 window.cpMantNoDay=()=>{MT.onlyNoDay=!MT.onlyNoDay;cpMantRender();};
+window.cpMantPrices=async function(){
+  const list=priceMismatch(); if(!list.length){ toast('Todos los valores ya coinciden con su frecuencia'); return; }
+  if(!confirm('Se van a actualizar '+list.length+' clientes de la bandeja:\nSemanal '+money(FREQ_PRICE.weekly)+' · Cada 15 días '+money(FREQ_PRICE.biweekly)+' · Mensual '+money(FREQ_PRICE.monthly)+'\n\nTambién cambian las visitas pendientes futuras que tengan el valor anterior. ¿Continuar?')) return;
+  const jobs=[]; list.forEach(c=>applyPrice(c).forEach(j=>jobs.push(j)));
+  dbSave(); try{ filterClients(); renderToday(); renderRoute(); renderDashboard(); }catch(e){}
+  cpMantRender();
+  toast('✓ '+list.length+' clientes actualizados'+(jobs.length?' · '+jobs.length+' visitas pendientes':''));
+  if(jobs.length){ const f=await uploadJobPrices(jobs); if(f) toast('⚠ '+f+' visitas se actualizarán en la nube cuando haya conexión'); }
+};
 window.cpMantImport=function(){
   const cand=clients.filter(c=>!c.deleted&&c.status==='activo'&&!(c.plan&&c.plan.freq)&&/mant/i.test(c.service||''));
   if(!cand.length) return;
   if(!confirm('Se van a cargar '+cand.length+' clientes a la bandeja (frecuencia según su servicio, sin día asignado). ¿Continuar?')) return;
-  cand.forEach(c=>setPlan(c,{freq:/quinc/i.test(c.service||'')?'biweekly':'weekly'}));
-  cpMantRender(); toast('✓ '+cand.length+' clientes importados a la bandeja');
+  const jobs=[];
+  cand.forEach(c=>{ setPlan(c,{freq:/quinc/i.test(c.service||'')?'biweekly':'weekly'}); applyPrice(c).forEach(j=>jobs.push(j)); });
+  if(jobs.length) uploadJobPrices(jobs);
+  cpMantRender(); toast('✓ '+cand.length+' clientes importados a la bandeja con su valor por visita');
 };
 
 // ── planificador por día ──
