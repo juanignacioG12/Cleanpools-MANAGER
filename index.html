@@ -1609,6 +1609,16 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     </div>
 
 
+    <!-- MANTENIMIENTOS: bandeja + planificador por día -->
+    <div id="pg-mant" class="page">
+      <div class="aa-chips" style="padding:10px 0 6px">
+        <div class="aa-chip on" id="mt-tab-box" onclick="cpMantTab('box')">📥 Bandeja</div>
+        <div class="aa-chip" id="mt-tab-plan" onclick="cpMantTab('plan')">🗓 Por día</div>
+        <div class="aa-chip" style="margin-left:auto;background:var(--c3);color:#fff;border-color:var(--c3)" onclick="cpMantNew()">+ Nuevo</div>
+      </div>
+      <div id="mt-body"></div>
+    </div>
+
     <!-- VISTA EMPLEADO (solo visible para rol=empleado) -->
     <div id="pg-empleado" class="page">
       <div style="padding:14px 16px 6px;font-size:15px;font-weight:800;color:var(--text)">
@@ -1759,6 +1769,14 @@ html[data-theme="light"] .logo-sub{color:var(--c6)}
     <div class="fab-opt-ico">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
     </div>
+  </div>
+  <div class="fab-opt" onclick="closeFab();cpMantNew()">
+    <span class="fab-opt-lbl">Nuevo mantenimiento</span>
+    <div class="fab-opt-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M12 3c3 4 6 6.5 6 10a6 6 0 01-12 0c0-3.5 3-6 6-10z"/></svg></div>
+  </div>
+  <div class="fab-opt" onclick="closeFab();showPage('mant')">
+    <span class="fab-opt-lbl">Mantenimientos</span>
+    <div class="fab-opt-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
   </div>
   <div class="fab-opt" onclick="closeFab();cpOpenAutoAgenda()">
     <span class="fab-opt-lbl">Generar agenda</span>
@@ -1964,6 +1982,10 @@ function jitterCoord(zone,id){
 function esc(v){
   return String(v==null?'':v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
+// Plan Plus (químicos incluidos): siempre se muestra en dorado
+function cpIsPlus(c){ return !!(c&&c.plan&&c.plan.plus); }
+function cpPlusCls(c){ return cpIsPlus(c)?' plus-gold':''; }
+function cpPlusTag(c){ return cpIsPlus(c)?'<span class="plus-tag">★ PLUS</span>':''; }
 function normName(s){ return s.toLowerCase().replace(/[^a-záéíóúüñ0-9 ]/gi,'').trim(); }
 function findOrCreateClient(name,zone,svc,price,addr,lat,lng){
   // Buscar por nombre exacto o normalizado (evita duplicados por capitalización/espacios)
@@ -2045,7 +2067,7 @@ function renderMarkers(list){
     const next=nextServiceFor(c.id);
     const nextTxt=next?fmtAgendaDate(next.date)+(next.time?' · '+next.time:''):'Sin próximo servicio';
     m.bindPopup(`
-      <b>${esc(c.n)}</b><br>
+      <b class="${cpPlusCls(c).trim()}">${esc(c.n)}</b>${cpPlusTag(c)}<br>
       📍 ${c.address||c.zone}<br>
       ${c.phone?('📞 '+c.phone+'<br>'):''}
       🗓 ${nextTxt}<br>
@@ -2110,7 +2132,7 @@ function mapSearchExec(){
   res.style.display='block';
   res.innerHTML=fl.slice(0,8).map(c=>`
     <div class="msr" onclick="mapFocusClient(${c.id})">
-      <b>${esc(c.n)}</b> <span style="color:var(--text3)">${esc(c.zone)}</span>
+      <b class="${cpPlusCls(c).trim()}">${esc(c.n)}</b>${cpPlusTag(c)} <span style="color:var(--text3)">${esc(c.zone)}</span>
     </div>`).join('');
 }
 function mapFocusClient(id){
@@ -2291,7 +2313,7 @@ function renderToday(){
       <div class="wdot ${j.status==='done'?'ddone':j.status==='now'?'dnow':'dpend'}" style="margin-top:6px"></div>
       <div class="wav ${c.avc}">${c.av}</div>
       <div class="wi-inf">
-        <div class="wi-name">${esc(c.n)}</div>
+        <div class="wi-name${cpPlusCls(c)}">${esc(c.n)}${cpPlusTag(c)}</div>
         <div class="wi-det">${c.service}${c.address?(' · '+c.address):''}</div>
         ${j.notes?`<div class="jcard-notes" style="margin-top:5px">📝 ${j.notes}</div>`:''}
         ${j.assignLabel?`<div style="font-size:10px;color:var(--c6);margin-top:4px;font-weight:700">${j.assignLabel}</div>`:''}
@@ -2433,7 +2455,7 @@ function renderClients(list){
     <div class="cr${c.status==='inactivo'?' cr-inactivo':''}">
       <div class="cav ${c.avc}">${c.av}</div>
       <div style="flex:1;min-width:0" onclick="showClientHistory(${c.id})">
-        <div class="cn">${esc(c.n)}</div>
+        <div class="cn${cpPlusCls(c)}">${esc(c.n)}${cpPlusTag(c)}</div>
         <div class="cz">${esc(c.zone)} · ${esc(c.service)} · Últ: ${esc(c.last)}</div>
         ${sfil==='incompletos'?`<div style="margin-top:4px;font-size:10px;color:var(--amber)">⚠ Falta: ${clientMissingFields(c).join(', ')}</div>`:''}
         ${c.notes?`<div class="jcard-notes" style="margin-top:4px">📝 ${esc(c.notes)}</div>`:''}
@@ -3017,7 +3039,7 @@ function renderRoute(){
       <div class="drag-h" title="Mantené y arrastrá para reordenar">⋮⋮</div>
       <div class="rnum ${j.status==='done'?'rdone':''}">${j.status==='done'?'✓':i+1}</div>
       <div class="ri">
-        <div class="rn">${esc(cl.n)} ${!validCoord(cl.lat,cl.lng)?'<span style="color:var(--amber);font-size:9px">⚠ Sin GPS</span>':''}</div>
+        <div class="rn${cpPlusCls(cl)}">${esc(cl.n)}${cpPlusTag(cl)} ${!validCoord(cl.lat,cl.lng)?'<span style="color:var(--amber);font-size:9px">⚠ Sin GPS</span>':''}</div>
         <div class="ra">${esc(cl.address||cl.zone)}${j.time?' · '+j.time:''}</div>
         <div class="rtags">
           <span class="tag ${isLimpieza?'tl':'tm'}">${cl.service}</span>
@@ -3117,7 +3139,7 @@ function generarRecorrido(quiet){
         <div class="drag-h" title="Mantené y arrastrá para reordenar">⋮⋮</div>
         <div class="rs-num">${i+1}</div>
         <div class="rs-info">
-          <div class="rs-name">${esc(cl.n)}</div>
+          <div class="rs-name${cpPlusCls(cl)}">${esc(cl.n)}${cpPlusTag(cl)}</div>
           <div class="rs-detail">${cl.address||cl.zone} · ${j.time||'sin hora'} · ${cl.service}</div>
         </div>
         <div class="rs-dist">
@@ -3358,7 +3380,7 @@ function renderAgendaListPaint(key){
       <div class="jcard-top">
         <div>
           <div class="jcard-time">${j.time||'--:--'} ${j.status==='done'?'✓':''}</div>
-          <div class="jcard-name">${esc(c.n)}</div>
+          <div class="jcard-name${cpPlusCls(c)}">${esc(c.n)}${cpPlusTag(c)}</div>
           <div class="jcard-svc">${c.service} · <span style="color:var(--green);font-weight:700">$${((j.price??c.price)/1000).toFixed(0)}K</span></div>
           ${c.address?`<div class="jcard-addr">📍 ${c.address}</div>`:''}
           ${j.notes?`<div class="jcard-notes">📝 ${j.notes}</div>`:''}
@@ -4099,6 +4121,7 @@ function isPageAllowedForRole(id){
     // redirigido a su propia pantalla de trabajos, porque esta página no
     // estaba en la lista de restringidas.
     agenda:    ()=> true, // el empleado también ve el calendario (solo lectura)
+    mant:      ()=> currentUser?.rol==='admin' || currentUser?.rol==='administrador',
   };
   return restricted[id] ? restricted[id]() : true; // páginas no listadas: sin restricción (ej. ruta, empleado)
 }
@@ -4132,6 +4155,7 @@ function showPage(id, tab){
   if(id==='notas')   renderNotas();
   if(id==='calculadora') calcPlusInit();
   if(id==='informe') informeInit();
+  if(id==='mant' && window.cpMantRender) cpMantRender();
 
   // Guardar página activa en localStorage
   try{ localStorage.setItem('cp_page_v1', id); }catch(e){}
@@ -4161,6 +4185,7 @@ window.addEventListener('popstate', function(e){
     if(prev==='agenda')   renderCalendar();
     if(prev==='usuarios') loadUsuarios();
     if(prev==='informe') informeInit();
+    if(prev==='mant' && window.cpMantRender) cpMantRender();
     if(prev==='empleado') renderEmpleadoView();
     try{ localStorage.setItem('cp_page_v1', prev); }catch(e){}
   } else {
@@ -5122,7 +5147,7 @@ async function saveCliente(){
     _editingClientSnapshot = null;
     c.n=nombre;c.zone=zona;c.service=svc;c.price=precio;c.phone=tel;c.address=dir||zona;c.notes=notas;
     c.servicios=servicios;c.pileta=pileta;
-    if(window.cpPlanRead) c.plan=cpPlanRead();
+    if(window.cpPlanRead) c.plan=cpPlanRead(c.plan);
     c.av=nombre.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase().slice(0,2);
     if(hasCoords){c.lat=latVal;c.lng=lngVal;c.googleMapsUrl=mapsUrl;}
     toast('✓ '+nombre+' actualizado');
@@ -5133,7 +5158,7 @@ async function saveCliente(){
     clients.push({n:nombre,zone:zona,service:svc,price:precio,status:'activo',av,avc:AV[id%AV.length],
       last:'hoy',lat:coords[0],lng:coords[1],id,phone:tel,address:dir||zona,notes:notas,deleted:false,
       googleMapsUrl:hasCoords?mapsUrl:'',fechaCreacion:new Date().toISOString(),servicios,pileta,
-      plan:(window.cpPlanRead?cpPlanRead():null)});
+      plan:(window.cpPlanRead?cpPlanRead(null):null)});
     if(!hasCoords) toast('✓ '+nombre+' agregado sin ubicación GPS — editá el cliente para agregarla');
     else toast('✓ '+nombre+' agregado como cliente');
   }
@@ -7576,7 +7601,7 @@ function exportToGoogleCalendar(dateKey){
       <div class="mlabel" style="color:var(--c6)">🗓 Plan de visitas (para generar la agenda automática)</div>
       <div style="display:flex;gap:8px;margin-top:6px">
         <select class="minput" id="nc-plan-freq" title="Frecuencia">
-          <option value="">Frecuencia: según servicio</option>
+          <option value="">Sin plan de mantenimiento</option>
           <option value="weekly">Semanal</option>
           <option value="biweekly">Cada 15 días</option>
           <option value="monthly">Cada 4 semanas</option>
@@ -7587,6 +7612,10 @@ function exportToGoogleCalendar(dateKey){
           <option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option>
           <option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option>
         </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <input class="minput" id="nc-plan-start" type="date" title="Inicia">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#D4A017;white-space:nowrap"><input type="checkbox" id="nc-plan-plus" style="margin:0">★ Plan Plus</label>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <input class="minput" id="nc-plan-time" type="time" title="Hora fija (opcional)">
@@ -8038,8 +8067,10 @@ const CFG_KEY='cp_aa_cfg_v1';
 // ── estilos ──
 const st=document.createElement('style');
 st.textContent=`
+.plus-gold{color:#D9A514!important}
+.plus-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.3px;color:#3a2a00;background:linear-gradient(135deg,#F6D365,#D4A017);vertical-align:middle}
 .aa-chips{display:flex;gap:6px;flex-wrap:wrap}
-.aa-chip{padding:7px 11px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none}
+.aa-chip{white-space:nowrap;padding:7px 11px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;user-select:none}
 .aa-chip.on{background:var(--c3);color:#fff;border-color:var(--c3)}
 .aa-sum{background:var(--pdim);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px}
 .aa-sum b{color:var(--c6)}
@@ -8077,7 +8108,7 @@ wrap.innerHTML=`
       </div>
       <div class="mfield"><div class="mlabel">Días de trabajo</div><div class="aa-chips" id="aa-days"></div></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 12px"><input type="checkbox" id="aa-lunch" checked style="margin:0"> Pausa de almuerzo 13:00–14:00</label>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Usa el plan de cada cliente (día, frecuencia, hora, responsable). Lo que no tenga día fijo se agrupa por zona y se reparte parejo según el tiempo de la jornada; cada responsable se calcula por separado. Antes de guardar vas a ver la propuesta completa y podés ajustarla.</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Usa la bandeja de mantenimientos y el planificador por día (día, frecuencia, inicio, orden, responsable). Lo que no tenga día fijo se agrupa por zona y se reparte parejo según el tiempo de la jornada; cada responsable se calcula por separado. Antes de guardar vas a ver la propuesta completa y podés ajustarla.</div>
     </div>
     <div id="aa-prev" style="display:none"></div>
     <div class="mactions" id="aa-actions"></div>
@@ -8097,10 +8128,9 @@ const hasGps=c=>validCoord(c.lat,c.lng);
 // ── plan del cliente ──
 window.cpResolvePlan=function(c){
   const p=c.plan||{};
-  let freq=p.freq;
-  if(!freq){const s=(c.service||'').toLowerCase();freq=/quinc/.test(s)?'biweekly':(/mant/.test(s)?'weekly':'none');}
+  const freq=p.freq||'none'; // solo genera agenda quien está en la bandeja de mantenimientos
   const dow=(p.dow===''||p.dow==null)?null:Number(p.dow);
-  return {freq,dow,time:p.time||'',assign:p.assign||''};
+  return {freq,dow,time:p.time||'',assign:p.assign||'',start:p.start||'',plus:!!p.plus,ord:(typeof p.ord==='number')?p.ord:null};
 };
 const PERIOD={weekly:1,biweekly:2,monthly:4};
 function durationMin(c){
@@ -8127,14 +8157,19 @@ window.cpPlanFill=function(c){
   set('nc-plan-freq',p.freq||'');
   set('nc-plan-dow',(p.dow===0||p.dow)?String(p.dow):'');
   set('nc-plan-time',p.time||'');
+  set('nc-plan-start',p.start||'');
+  const pl=document.getElementById('nc-plan-plus'); if(pl) pl.checked=!!p.plus;
   fillAssignOptions(p.assign||'');
   try{ refreshUsersCache().then(()=>fillAssignOptions(p.assign||'')).catch(()=>{}); }catch(e){}
 };
-window.cpPlanRead=function(){
+// prev: plan existente del cliente — se conserva lo que este formulario no edita (ej. orden)
+window.cpPlanRead=function(prev){
   const g=id=>(document.getElementById(id)||{}).value||'';
-  const freq=g('nc-plan-freq'),dow=g('nc-plan-dow'),time=g('nc-plan-time'),assign=g('nc-plan-assign');
-  if(!freq&&!dow&&!time&&!assign) return null;
-  return {freq,dow:dow===''?null:Number(dow),time,assign};
+  const freq=g('nc-plan-freq'),dow=g('nc-plan-dow'),time=g('nc-plan-time'),assign=g('nc-plan-assign'),start=g('nc-plan-start');
+  const plus=!!(document.getElementById('nc-plan-plus')||{}).checked;
+  if(!freq&&!dow&&!time&&!assign&&!start&&!plus) return null;
+  const out=Object.assign({},prev||{},{freq,dow:dow===''?null:Number(dow),time,assign,start,plus});
+  return out;
 };
 
 // ── configuración ──
@@ -8208,7 +8243,9 @@ function pathKm(list,start){
 function layoutDay(stops,cfg){
   const base=(typeof baseLocation!=='undefined')?baseLocation:null;
   const anchored=stops.filter(s=>s.p.time).map(s=>({...s,start:toMin(s.p.time),dur:durationMin(s.c)})).sort((a,b)=>a.start-b.start);
-  const flex=orderRoute(stops.filter(s=>!s.p.time),base);
+  const flexAll=stops.filter(s=>!s.p.time);
+  const manual=flexAll.filter(s=>s.p.ord!=null).sort((a,b)=>a.p.ord-b.p.ord);
+  const flex=manual.concat(orderRoute(flexAll.filter(s=>s.p.ord==null),base));
   let t=toMin(cfg.startTime), prev=base&&validCoord(base.lat,base.lng)?[base.lat,base.lng]:null;
   const out=[];
   flex.forEach(s=>{
@@ -8264,9 +8301,10 @@ function buildProposal(cfg){
   clients.forEach(c=>{
     if(c.deleted||c.status!=='activo') return;
     const p=cpResolvePlan(c);
-    if(p.freq==='none'){stats.skipNone++;return;}
+    if(p.freq==='none'){stats.skipNone++;return;} // fuera de la bandeja
     const period=PERIOD[p.freq]||1;
-    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor:lastJobDate(c,endKey),dow:null,phase:0});
+    const sd=p.start?pk(p.start):null;
+    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor:lastJobDate(c,endKey)||sd,sd,dow:null,phase:0});
   });
   // carga (minutos por semana) por responsable y día
   const loads={};
@@ -8302,9 +8340,12 @@ function buildProposal(cfg){
   elig.forEach(x=>{
     stats.clients++;
     if(!hasGps(x.c)) stats.noGps++;
+    // si la fecha de inicio es el ancla, la cuenta empieza en el primer día asignado desde esa fecha
+    if(x.sd&&x.anchor===x.sd){ let f=new Date(x.sd); for(let k=0;k<7&&f.getDay()!==x.dow;k++) f=addDays(f,1); x.anchor=f; }
     let any=false,coveredHit=false;
     for(let d=new Date(cfg.start);d<=end;d=addDays(d,1)){
       if(d.getDay()!==x.dow) continue;
+      if(x.sd&&d<x.sd) continue; // todavía no inicia
       const wk=x.anchor?weeksBetween(x.anchor,d):weeksBetween(cfg.start,d);
       const m=((wk%x.period)+x.period)%x.period;
       if(x.anchor?m!==0:m!==x.phase) continue;
@@ -8368,7 +8409,7 @@ function renderProposal(){
   let sum=`<div class="aa-sum"><b>${visits} visitas</b> en <b>${act.length} días</b> · ~${km.toFixed(0)} km de ruta<br>`+
     `${st.clients} clientes con plan activo`+
     (st.covered?` · ${st.covered} ya tenían visita esas semanas (no se tocan)`:'')+
-    (st.skipNone?` · ${st.skipNone} sin repetición (a pedido)`:'')+
+    (st.skipNone?` · ${st.skipNone} activos fuera de la bandeja (no se agendan)`:'')+
     (st.noGps?`<br><span class="aa-warn">⚠ ${st.noGps} sin ubicación GPS: van al final del día sin optimizar</span>`:'')+
     (st.overDays?`<br><span class="aa-warn">⚠ ${st.overDays} días pasan de las ${P.cfg.endTime}: con esa carga no alcanza un solo equipo. Asigná responsables en el plan de los clientes, sumá días de trabajo o sacá visitas con ✕.</span>`:'')+`</div>`;
   if(!P.days.length) sum+='<div class="agenda-empty">No hay visitas nuevas para generar en ese período. Revisá el plan de los clientes (frecuencia y día) o ampliá las semanas.</div>';
@@ -8462,10 +8503,283 @@ window.cpRetryPending=async function(){
 };
 window.addEventListener('online',()=>setTimeout(cpRetryPending,1500));
 
+window.cpOrderRoute=orderRoute; window.cpPathKm=pathKm;
 // botón en Agenda: solo para quien puede crear tareas
 function syncCta(){ const el=document.getElementById('cp-auto-cta'); if(el) el.style.display=(typeof canCreateTasks==='function'&&currentUser&&canCreateTasks())?'block':'none'; }
 const _showPage=window.showPage;
 if(typeof _showPage==='function'){ window.showPage=function(){ const r=_showPage.apply(this,arguments); try{syncCta();}catch(e){} return r; }; }
+})();
+
+</script>
+<script>
+// ════════════════════════════════════════════════════════════
+// MANTENIMIENTOS — carga simple + bandeja + planificador por día
+//  • Carga: cliente / frecuencia / cuándo inicia / Plan Plus (dorado).
+//  • Bandeja: todos los que quieren mantenimiento, agrupados por zona.
+//  • Por día: vos elegís qué clientes (de la zona que quieras) van a cada
+//    día; se ordenan por cercanía/lejanía a tu base o saliendo desde un
+//    cliente puntual, y podés subir/bajar a mano.
+//  El plan vive en cliente.plan = {freq,start,plus,dow,ord,...}
+// ════════════════════════════════════════════════════════════
+(function(){
+'use strict';
+const DOWN=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const DOWF=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const MON=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const FREQ={weekly:'Semanal',biweekly:'Cada 15 días',monthly:'Cada 4 semanas'};
+const ZONES=['Capital','Rawson','Pocito','Rivadavia','Santa Lucía','Caucete','9 de Julio'];
+const MT={tab:'box',zone:'',onlyNoDay:false,day:1};
+const hasGps=c=>validCoord(c.lat,c.lng);
+const inBox=c=>!c.deleted&&c.status==='activo'&&c.plan&&FREQ[c.plan.freq];
+const dowOf=c=>(c.plan&&(c.plan.dow===0||c.plan.dow))?Number(c.plan.dow):null;
+const fdate=k=>{if(!k)return '';const [y,m,d]=k.split('-').map(Number);return d+' '+MON[m-1];};
+const base=()=>(typeof baseLocation!=='undefined'&&baseLocation&&validCoord(baseLocation.lat,baseLocation.lng))?[baseLocation.lat,baseLocation.lng]:null;
+const dist=(a,c)=>(a&&hasGps(c))?haversineKm(a,[c.lat,c.lng]):null;
+
+// ── subida diferida (agrupa cambios de orden/día) ──
+const dirty=new Set(); let tmr=null;
+function persist(c){
+  c._edited=true; dirty.add(c.id);
+  dbSave();
+  clearTimeout(tmr);
+  tmr=setTimeout(()=>{
+    const ids=[...dirty]; dirty.clear();
+    ids.forEach(id=>{const cl=getClientById(id); if(cl) saveClienteToSupabase(cl).catch(()=>queueSync('save_cliente',{clientId:cl.id}));});
+  },1500);
+}
+function setPlan(c,patch){ c.plan=Object.assign({},c.plan||{},patch); persist(c); }
+
+// ── modal: nuevo / editar mantenimiento ──
+const wrap=document.createElement('div');
+wrap.innerHTML=`
+<div class="modal-overlay" id="modal-mant" onclick="if(event.target===this)closeModal('mant')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div class="mtitle" id="mm-title">Nuevo mantenimiento</div>
+    <div class="mfield"><div class="mlabel">Cliente</div>
+      <input class="minput" id="mm-cli" type="text" placeholder="Buscar o escribir cliente..." list="cli-dl" oninput="cpMantPick()">
+      <div id="mm-zone-wrap" style="display:none;margin-top:8px"><div class="mlabel">Zona del cliente nuevo</div><select class="minput" id="mm-zone"></select></div>
+    </div>
+    <div class="mfield"><div class="mlabel">Frecuencia</div>
+      <div class="aa-chips" id="mm-freq"></div></div>
+    <div class="mfield"><div class="mlabel">Cuándo inicia</div><input class="minput" id="mm-start" type="date"></div>
+    <div class="mfield">
+      <div class="aa-chip" id="mm-plus" onclick="cpMantPlus()" style="display:inline-block">★ Plan Plus · químicos incluidos</div>
+    </div>
+    <div class="mactions" id="mm-actions"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-mantpick" onclick="if(event.target===this)closeModal('mantpick')">
+  <div class="modal-box">
+    <div class="mhandle"></div>
+    <div class="mtitle" id="mp-title">Agregar clientes</div>
+    <div class="aa-chips" id="mp-zones" style="margin-bottom:8px"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-bottom:8px"><input type="checkbox" id="mp-others" onchange="cpPickOthers()" style="margin:0"> Incluir clientes que ya están en otro día (los mueve)</label>
+    <div id="mp-list" style="max-height:48vh;overflow-y:auto"></div>
+    <div class="mactions" id="mp-actions"></div>
+  </div>
+</div>`;
+while(wrap.firstElementChild) document.body.appendChild(wrap.firstElementChild);
+
+const MM={freq:'weekly',plus:false,editId:null};
+function renderFreq(){ document.getElementById('mm-freq').innerHTML=Object.entries(FREQ).map(([k,v])=>`<div class="aa-chip${MM.freq===k?' on':''}" onclick="cpMantFreq('${k}')">${v}</div>`).join(''); }
+function renderPlus(){ const e=document.getElementById('mm-plus'); e.style.cssText='display:inline-block;'+(MM.plus?'background:linear-gradient(135deg,#F6D365,#D4A017);color:#3a2a00;border-color:#D4A017':'color:#D4A017;border-color:#D4A017'); }
+window.cpMantFreq=k=>{MM.freq=k;renderFreq();};
+window.cpMantPlus=()=>{MM.plus=!MM.plus;renderPlus();};
+window.cpMantPick=function(){
+  const name=document.getElementById('mm-cli').value.trim();
+  const c=clients.find(x=>!x.deleted&&x.n===name);
+  document.getElementById('mm-zone-wrap').style.display=(name&&!c)?'block':'none';
+  if(c&&c.plan&&FREQ[c.plan.freq]){ MM.freq=c.plan.freq; MM.plus=!!c.plan.plus; if(c.plan.start) document.getElementById('mm-start').value=c.plan.start; renderFreq(); renderPlus(); }
+  else if(c){ const s=(c.service||'').toLowerCase(); MM.freq=/quinc/.test(s)?'biweekly':'weekly'; renderFreq(); }
+};
+function openMant(c){
+  MM.editId=c?c.id:null;
+  const p=(c&&c.plan)||{};
+  MM.freq=FREQ[p.freq]?p.freq:'weekly'; MM.plus=!!p.plus;
+  document.getElementById('mm-title').textContent=c?'Editar mantenimiento':'Nuevo mantenimiento';
+  document.getElementById('mm-cli').value=c?c.n:''; document.getElementById('mm-cli').disabled=!!c;
+  document.getElementById('mm-zone-wrap').style.display='none';
+  const zs=[...new Set(ZONES.concat(clients.filter(x=>!x.deleted).map(x=>x.zone).filter(Boolean)))];
+  document.getElementById('mm-zone').innerHTML=zs.map(z=>`<option>${esc(z)}</option>`).join('');
+  document.getElementById('mm-start').value=p.start||dkey(addDays(new Date(),1));
+  renderFreq(); renderPlus();
+  document.getElementById('mm-actions').innerHTML=
+    (c&&inBox(c)?'<div class="bcancel" style="color:var(--red)" onclick="cpMantRemove()">Quitar</div>':'<div class="bcancel" onclick="closeModal(\'mant\')">Cancelar</div>')+
+    '<div class="bconfirm" onclick="cpMantSave()">Guardar ✓</div>';
+  try{ refreshClientDatalist(); }catch(e){}
+  openModal('mant');
+}
+window.cpMantNew=()=>{ if(!canCreateTasks()){toast('⚠ Tu usuario no puede cargar mantenimientos');return;} openMant(null); };
+window.cpMantEdit=id=>{ const c=getClientById(id); if(c) openMant(c); };
+window.cpMantSave=function(){
+  const name=document.getElementById('mm-cli').value.trim();
+  if(!name){toast('⚠ Elegí el cliente');return;}
+  let c=MM.editId!=null?getClientById(MM.editId):clients.find(x=>!x.deleted&&normName(x.n)===normName(name));
+  if(!c){
+    const zone=document.getElementById('mm-zone').value||'Capital';
+    const id=findOrCreateClient(name,zone,MM.freq==='biweekly'?'Mant. quincenal':'Mant. semanal',25000,'');
+    c=getClientById(id);
+  }
+  const start=document.getElementById('mm-start').value||'';
+  setPlan(c,{freq:MM.freq,start,plus:MM.plus});
+  if(!/mant/i.test(c.service||'')) c.service=MM.freq==='biweekly'?'Mant. quincenal':'Mant. semanal';
+  closeModal('mant');
+  try{ filterClients(); refreshClientDatalist(); }catch(e){}
+  cpMantRender();
+  toast('✓ '+c.n+' en la bandeja'+(MM.plus?' ★':''));
+};
+window.cpMantRemove=function(){
+  const c=getClientById(MM.editId); if(!c)return;
+  const p=Object.assign({},c.plan||{}); p.freq=''; p.dow=null; delete p.ord; c.plan=(p.plus||p.start||p.time||p.assign)?p:null; persist(c);
+  closeModal('mant'); cpMantRender(); toast('Quitado de la bandeja');
+};
+
+// ── render principal ──
+window.cpMantTab=t=>{MT.tab=t;cpMantRender();};
+window.cpMantRender=function(){
+  const tb=document.getElementById('mt-tab-box'),tp=document.getElementById('mt-tab-plan');
+  if(!tb) return;
+  tb.classList.toggle('on',MT.tab==='box'); tp.classList.toggle('on',MT.tab==='plan');
+  document.getElementById('mt-body').innerHTML=MT.tab==='box'?boxHtml():planHtml();
+};
+
+function rowChips(c){
+  const p=c.plan||{}, d=dowOf(c);
+  return `<span class="aa-chip" style="padding:2px 8px;font-size:10px;cursor:default">${FREQ[p.freq]}</span>`+
+    (p.start?`<span style="font-size:10px;color:var(--text3)">desde ${fdate(p.start)}</span>`:'')+
+    (d!=null?`<span class="aa-chip on" style="padding:2px 8px;font-size:10px;cursor:default">${DOWN[d]}</span>`:'<span style="font-size:10px;color:#e8a33d;font-weight:800">sin día</span>');
+}
+function boxHtml(){
+  const all=clients.filter(inBox);
+  const cand=clients.filter(c=>!c.deleted&&c.status==='activo'&&!(c.plan&&c.plan.freq)&&/mant/i.test(c.service||''));
+  const zones=[...new Set(all.map(c=>c.zone||'—'))].sort();
+  let list=all.filter(c=>(!MT.zone||(c.zone||'—')===MT.zone)&&(!MT.onlyNoDay||dowOf(c)==null));
+  const noDay=all.filter(c=>dowOf(c)==null).length, plus=all.filter(cpIsPlus).length;
+  let h=`<div class="aa-sum"><b>${all.length}</b> en la bandeja · <b>${noDay}</b> sin día asignado · <span class="plus-gold"><b>${plus}</b> Plus</span></div>`;
+  if(cand.length) h+=`<div class="aa-sum" style="display:flex;align-items:center;gap:10px"><span style="flex:1">Hay <b>${cand.length}</b> clientes activos con servicio de mantenimiento que todavía no están en la bandeja.</span><div class="aa-chip on" onclick="cpMantImport()">Importar</div></div>`;
+  h+=`<div class="aa-chips" style="margin-bottom:10px"><div class="aa-chip${MT.zone?'':' on'}" onclick="cpMantZone('')">Todas</div>`+
+    zones.map(z=>`<div class="aa-chip${MT.zone===z?' on':''}" onclick="cpMantZone('${esc(z).replace(/'/g,'&#39;')}')">${esc(z)}</div>`).join('')+
+    `<div class="aa-chip${MT.onlyNoDay?' on':''}" onclick="cpMantNoDay()">Solo sin día</div></div>`;
+  if(!all.length) return h+'<div class="agenda-empty">La bandeja está vacía. Tocá “+ Nuevo” para cargar un mantenimiento, o importá los clientes que ya tienen ese servicio.</div>';
+  const by={}; list.forEach(c=>(by[c.zone||'—']=by[c.zone||'—']||[]).push(c));
+  Object.keys(by).sort().forEach(z=>{
+    h+=`<div class="agenda-date" style="padding:10px 0 4px">${esc(z)} · ${by[z].length}</div>`;
+    by[z].sort((a,b)=>a.n.localeCompare(b.n)).forEach(c=>{
+      h+=`<div class="aa-stop mt-row${cpIsPlus(c)?' plus':''}" style="border:1px solid var(--border);border-radius:10px;margin-bottom:6px;${cpIsPlus(c)?'border-left:3px solid #D4A017;':''}cursor:pointer;flex-wrap:wrap" onclick="cpMantEdit(${c.id})">`+
+        `<span class="n${cpPlusCls(c)}" style="font-weight:800;font-size:13px;min-width:60%">${esc(c.n)}${cpPlusTag(c)}</span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${rowChips(c)}</span></div>`;
+    });
+  });
+  if(!list.length) h+='<div class="agenda-empty">No hay clientes con ese filtro.</div>';
+  return h;
+}
+window.cpMantZone=z=>{MT.zone=z;cpMantRender();};
+window.cpMantNoDay=()=>{MT.onlyNoDay=!MT.onlyNoDay;cpMantRender();};
+window.cpMantImport=function(){
+  const cand=clients.filter(c=>!c.deleted&&c.status==='activo'&&!(c.plan&&c.plan.freq)&&/mant/i.test(c.service||''));
+  if(!cand.length) return;
+  if(!confirm('Se van a cargar '+cand.length+' clientes a la bandeja (frecuencia según su servicio, sin día asignado). ¿Continuar?')) return;
+  cand.forEach(c=>setPlan(c,{freq:/quinc/i.test(c.service||'')?'biweekly':'weekly'}));
+  cpMantRender(); toast('✓ '+cand.length+' clientes importados a la bandeja');
+};
+
+// ── planificador por día ──
+function dayClients(d){
+  return clients.filter(c=>inBox(c)&&dowOf(c)===d).sort((a,b)=>{
+    const oa=(a.plan.ord!=null)?a.plan.ord:1e9, ob=(b.plan.ord!=null)?b.plan.ord:1e9;
+    return (oa-ob)||a.n.localeCompare(b.n);
+  });
+}
+function planHtml(){
+  const b=base(), list=dayClients(MT.day);
+  const chips=[1,2,3,4,5,6,0].map(d=>{const n=dayClients(d).length;return `<div class="aa-chip${MT.day===d?' on':''}" onclick="cpMantDay(${d})">${DOWN[d]}${n?` · ${n}`:''}</div>`;}).join('');
+  let h=`<div class="aa-chips" style="margin-bottom:10px;flex-wrap:nowrap;overflow-x:auto">${chips}</div>`;
+  const zs=[...new Set(list.map(c=>c.zone||'—'))];
+  let km=0; if(list.length&&cpPathKm) km=cpPathKm(list.map(c=>({c})),b?{lat:b[0],lng:b[1]}:null);
+  h+=`<div class="aa-sum"><b>${DOWF[MT.day]}</b> · ${list.length} clientes${zs.length?' · '+zs.map(esc).join(', '):''}${list.length?` · ~${km.toFixed(0)} km`:''}</div>`;
+  h+=`<div class="aa-chips" style="margin-bottom:10px">`+
+    `<div class="aa-chip on" onclick="cpPickOpen()">+ Agregar clientes</div>`+
+    (list.length>1?`<div class="aa-chip" onclick="cpMantSort('near')">↕ Cerca → lejos</div><div class="aa-chip" onclick="cpMantSort('far')">↕ Lejos → cerca</div>`:'')+`</div>`;
+  if(list.length>1&&!b) h+=`<div class="aa-sum"><span class="aa-warn">⚠ Para ordenar por cercanía o lejanía necesito tu base.</span> <span class="aa-chip on" style="margin-left:6px" onclick="openBaseModal()">Definir base</span></div>`;
+  if(list.length>1) h+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Tocá 📍 en un cliente para salir desde él: el resto se ordena solo a partir de ese punto.</div>`;
+  if(!list.length) h+='<div class="agenda-empty">Todavía no hay clientes en este día. Tocá “+ Agregar clientes” y elegí la zona.</div>';
+  let prev=b;
+  list.forEach((c,i)=>{
+    const d=dist(prev,c); if(hasGps(c)) prev=[c.lat,c.lng];
+    h+=`<div class="aa-stop mt-row${cpIsPlus(c)?' plus':''}" style="border:1px solid var(--border);border-radius:10px;margin-bottom:6px;${cpIsPlus(c)?'border-left:3px solid #D4A017;':''}">`+
+      `<span class="t" style="min-width:18px">${i+1}</span>`+
+      `<span class="n${cpPlusCls(c)}" style="font-weight:800;font-size:13px">${esc(c.n)}${cpPlusTag(c)}<br><span class="z">${esc(c.zone||'')} · ${FREQ[c.plan.freq]}${hasGps(c)?'':' · <span class="aa-warn">⚠ sin GPS</span>'}${d!=null?` · ${d.toFixed(1)} km`:''}</span></span>`+
+      `<span class="x" title="Salir desde acá" onclick="cpMantFrom(${c.id})">📍</span>`+
+      `<span class="x" onclick="cpMantMove(${c.id},-1)">▲</span><span class="x" onclick="cpMantMove(${c.id},1)">▼</span>`+
+      `<span class="x" onclick="cpMantUnday(${c.id})">✕</span></div>`;
+  });
+  if(list.length) h+=`<div class="aa-chip on" style="display:block;text-align:center;margin-top:12px" onclick="cpOpenAutoAgenda()">🗓 Generar agenda con este plan</div>`;
+  return h;
+}
+window.cpMantDay=d=>{MT.day=d;cpMantRender();};
+function saveOrder(list){ list.forEach((c,i)=>{ if(!c.plan||c.plan.ord!==i) setPlan(c,{ord:i}); }); }
+window.cpMantSort=function(mode){
+  const b=base(); if(!b){toast('⚠ Definí tu base primero');return;}
+  const list=dayClients(MT.day);
+  list.sort((x,y)=>{
+    const dx=hasGps(x)?haversineKm(b,[x.lat,x.lng]):1e9, dy=hasGps(y)?haversineKm(b,[y.lat,y.lng]):1e9;
+    return mode==='near'?dx-dy:(dx===1e9?1:dy===1e9?-1:dy-dx);
+  });
+  saveOrder(list); cpMantRender(); toast(mode==='near'?'Ordenado de más cerca a más lejos de tu base':'Ordenado de más lejos a más cerca de tu base');
+};
+window.cpMantFrom=function(id){
+  const list=dayClients(MT.day), first=list.find(c=>c.id===id); if(!first)return;
+  if(!hasGps(first)){toast('⚠ Ese cliente no tiene ubicación GPS');return;}
+  const rest=cpOrderRoute(list.filter(c=>c.id!==id).map(c=>({c})),{lat:first.lat,lng:first.lng}).map(s=>s.c);
+  saveOrder([first].concat(rest)); cpMantRender(); toast('Ruta ordenada saliendo desde '+first.n);
+};
+window.cpMantMove=function(id,dir){
+  const list=dayClients(MT.day), i=list.findIndex(c=>c.id===id), j=i+dir;
+  if(i<0||j<0||j>=list.length) return;
+  [list[i],list[j]]=[list[j],list[i]]; saveOrder(list); cpMantRender();
+};
+window.cpMantUnday=function(id){
+  const c=getClientById(id); if(!c)return;
+  const p=Object.assign({},c.plan); p.dow=null; delete p.ord; c.plan=p; persist(c);
+  saveOrder(dayClients(MT.day)); cpMantRender();
+};
+
+// ── selector: agregar clientes a un día ──
+const PK={zone:'',sel:new Set(),others:false};
+window.cpPickOpen=function(){
+  PK.zone=''; PK.sel=new Set(); PK.others=false; document.getElementById('mp-others').checked=false;
+  document.getElementById('mp-title').textContent='Agregar a '+DOWF[MT.day];
+  renderPick(); openModal('mantpick');
+};
+window.cpPickOthers=function(){ PK.others=document.getElementById('mp-others').checked; PK.sel=new Set(); renderPick(); };
+function pickPool(){ return clients.filter(c=>inBox(c)&&dowOf(c)!==MT.day&&(PK.others||dowOf(c)==null)); }
+function renderPick(){
+  const pool=pickPool();
+  const zs=[...new Set(pool.map(c=>c.zone||'—'))].sort();
+  document.getElementById('mp-zones').innerHTML=`<div class="aa-chip${PK.zone?'':' on'}" onclick="cpPickZone('')">Todas (${pool.length})</div>`+
+    zs.map(z=>`<div class="aa-chip${PK.zone===z?' on':''}" onclick="cpPickZone('${esc(z).replace(/'/g,'&#39;')}')">${esc(z)} (${pool.filter(c=>(c.zone||'—')===z).length})</div>`).join('');
+  const shown=pool.filter(c=>!PK.zone||(c.zone||'—')===PK.zone).sort((a,b)=>(a.zone||'').localeCompare(b.zone||'')||a.n.localeCompare(b.n));
+  document.getElementById('mp-list').innerHTML=shown.length?
+    `<div class="aa-stop" style="cursor:pointer" onclick="cpPickAll()"><span class="n" style="font-weight:800;color:var(--c6)">${PK.zone?'Seleccionar todos de '+esc(PK.zone):'Seleccionar todos'}</span></div>`+
+    shown.map(c=>`<label class="aa-stop" style="cursor:pointer"><input type="checkbox" ${PK.sel.has(c.id)?'checked':''} onchange="cpPickTog(${c.id})" style="margin:0"><span class="n${cpPlusCls(c)}">${esc(c.n)}${cpPlusTag(c)}</span><span class="z">${esc(c.zone||'')}${dowOf(c)!=null?' · hoy: '+DOWN[dowOf(c)]:''}</span></label>`).join('')
+    :'<div class="agenda-empty">No quedan clientes sin día en la bandeja.</div>';
+  const n=PK.sel.size;
+  document.getElementById('mp-actions').innerHTML='<div class="bcancel" onclick="closeModal(\'mantpick\')">Cancelar</div>'+
+    `<div class="bconfirm" onclick="cpPickAdd()" ${n?'':'style="opacity:.4;pointer-events:none"'}>Agregar ${n} ✓</div>`;
+}
+window.cpPickZone=z=>{PK.zone=z;renderPick();};
+window.cpPickTog=id=>{PK.sel.has(id)?PK.sel.delete(id):PK.sel.add(id);renderPick();};
+window.cpPickAll=function(){
+  const shown=pickPool().filter(c=>!PK.zone||(c.zone||'—')===PK.zone);
+  const all=shown.every(c=>PK.sel.has(c.id)); shown.forEach(c=>all?PK.sel.delete(c.id):PK.sel.add(c.id)); renderPick();
+};
+window.cpPickAdd=function(){
+  const cur=dayClients(MT.day); let ord=cur.length;
+  const moved=[];
+  PK.sel.forEach(id=>{ const c=getClientById(id); if(!c)return; const old=dowOf(c); if(old!=null&&old!==MT.day) moved.push(old); setPlan(c,{dow:MT.day,ord:ord++}); });
+  [...new Set(moved)].forEach(d=>saveOrder(dayClients(d)));
+  closeModal('mantpick'); cpMantRender(); toast('✓ '+PK.sel.size+' clientes agregados a '+DOWF[MT.day]);
+};
 })();
 
 </script>
