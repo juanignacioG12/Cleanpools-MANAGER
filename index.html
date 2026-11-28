@@ -2981,8 +2981,8 @@ function renderRoute(){
       prevPt = [j.client.lat,j.client.lng];
     }
   });
-  // avg 30km/h in city, +15min service per stop
-  const totalMin = Math.round(totalKm/30*60) + jobs.length*15;
+  // avg 30km/h in city + minutos de trabajo según el servicio de cada parada
+  const totalMin = Math.round(totalKm/30*60) + jobs.reduce((a,j)=>a+visitMinutes(j.client),0);
 
   document.getElementById('r-stops').textContent=jobs.length+(jobs.length===1?' parada':' paradas');
   // Facturación y Neto son información sensible del negocio: solo admin.
@@ -3115,7 +3115,7 @@ function generarRecorrido(quiet){
   // + vuelta a base
   if(_recorridoJobs.length) totalKm += haversineKm(prevPt, basePt);
 
-  const totalMin  = Math.round(totalKm/30*60) + _recorridoJobs.length * 15;
+  const totalMin  = Math.round(totalKm/30*60) + _recorridoJobs.reduce((a,j)=>a+visitMinutes(j.client),0);
   const totalFact = _recorridoJobs.reduce((a,j)=>a+jobIncome(j,j.client),0);
 
   // Actualizar métricas del panel
@@ -3858,19 +3858,27 @@ function nwClientPick(){
     else document.getElementById('nw-svc-custom').style.display='none';
   }
 }
-// Duración estándar por tipo de servicio (horas). Servicios no listados
-// (ej. "Personalizado…") no tocan la hora de fin — el usuario la pone a mano.
-const SERVICE_DURATIONS = { 'Mantenimiento':1, 'Limpieza profunda':5, 'Servicio de filtrado':1 };
+// Duración estándar por tipo de servicio (MINUTOS) — solo el trabajo en la pileta; los traslados se suman aparte.
+// Servicios no listados (ej. "Personalizado…") no tocan la hora de fin — el usuario la pone a mano.
+const SERVICE_DURATIONS = { 'Mantenimiento':30, 'Limpieza profunda':300, 'Servicio de filtrado':60 };
+// Minutos de trabajo de una visita según el servicio del cliente (ej. "Mant. semanal" → 30)
+function visitMinutes(c){
+  const s=((c&&c.service)||'').toLowerCase();
+  if(/mant/.test(s)) return SERVICE_DURATIONS['Mantenimiento'];
+  if(/profunda|limpieza/.test(s)) return SERVICE_DURATIONS['Limpieza profunda'];
+  if(/filtr/.test(s)) return SERVICE_DURATIONS['Servicio de filtrado'];
+  return SERVICE_DURATIONS['Mantenimiento'];
+}
 
 function nwUpdateEndTime(){
   const svc = document.getElementById('nw-svc').value;
-  const hours = SERVICE_DURATIONS[svc];
-  if(hours==null) return; // servicio personalizado: no se toca
+  const mins = SERVICE_DURATIONS[svc];
+  if(mins==null) return; // servicio personalizado: no se toca
   const startVal = document.getElementById('nw-time-start').value;
   if(!startVal) return;
   const [h,m] = startVal.split(':').map(Number);
-  const endH = (h+hours) % 24;
-  document.getElementById('nw-time-end').value = pad2(endH)+':'+pad2(m);
+  const tot = (h*60+m+mins) % 1440;
+  document.getElementById('nw-time-end').value = pad2(Math.floor(tot/60))+':'+pad2(tot%60);
 }
 
 function nwServiceChange(){
@@ -8106,9 +8114,11 @@ wrap.innerHTML=`
           <select class="minput" id="aa-weeks"><option value="1">1 semana</option><option value="2">2 semanas</option><option value="4" selected>4 semanas</option></select></div>
       </div>
       <div style="display:flex;gap:8px">
-        <div class="mfield" style="flex:1"><div class="mlabel">Primera visita</div><input class="minput" id="aa-time" type="time" value="09:00"></div>
+        <div class="mfield" style="flex:1"><div class="mlabel">Sale de la base a las</div><input class="minput" id="aa-time" type="time" value="09:00"></div>
         <div class="mfield" style="flex:1"><div class="mlabel">Jornada hasta</div><input class="minput" id="aa-end" type="time" value="18:00"></div>
       </div>
+      <div class="mfield"><div class="mlabel">Margen extra entre visitas (min)</div><input class="minput" id="aa-buf" type="number" min="0" max="30" value="5" inputmode="numeric">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Se suma a cada traslado: estacionar, entrar al domicilio, guardar herramientas. Ponelo en 0 si no lo querés.</div></div>
       <div class="mfield"><div class="mlabel">Días de trabajo</div><div class="aa-chips" id="aa-days"></div></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 8px"><input type="checkbox" id="aa-lunch" checked style="margin:0"> Pausa de almuerzo 13:00–14:00</label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--text2);margin:2px 0 12px"><input type="checkbox" id="aa-reorg" checked style="margin:3px 0 0"><span><b style="color:var(--c6)">Reorganizar también los mantenimientos ya agendados</b><br><span style="font-size:11px;color:var(--text3)">Las visitas pendientes de esas semanas se mueven al día que les toca según su zona y se reordenan por ruta. Las ya realizadas o en curso no se tocan.</span></span></label>
@@ -8137,13 +8147,64 @@ window.cpResolvePlan=function(c){
   return {freq,dow,time:p.time||'',assign:p.assign||'',start:p.start||'',plus:!!p.plus,ord:(typeof p.ord==='number')?p.ord:null};
 };
 const PERIOD={weekly:1,biweekly:2,monthly:4};
-function durationMin(c){
-  const s=(c.service||'').toLowerCase();
-  if(/mant/.test(s)) return 60;
-  if(/profunda|limpieza/.test(s)) return 300;
-  return 60;
+// minutos de trabajo en la pileta (mantenimiento = 30); los traslados se suman aparte
+function durationMin(c){ return (typeof visitMinutes==='function')?visitMinutes(c):30; }
+
+// ── TRASLADOS: tiempos reales por calle (OSRM / OpenStreetMap) con caché en el teléfono ──
+// Si el servicio no responde o no hay conexión, se estima: distancia en línea × 1,35 (calles) a 32 km/h.
+const TRAVEL_URL='https://router.project-osrm.org/table/v1/driving/';
+let TC={}, tcLoaded=false, tcDirty=false;
+async function tcLoad(){ if(tcLoaded) return; tcLoaded=true; try{ const v=await idbGet('travel_v1'); if(v&&typeof v==='object') TC=v; }catch(e){} }
+function tcSave(){
+  if(!tcDirty) return; tcDirty=false;
+  const ks=Object.keys(TC); if(ks.length>40000) ks.slice(0,ks.length-40000).forEach(k=>delete TC[k]);
+  try{ idbSet('travel_v1',TC).catch(()=>{}); }catch(e){}
 }
-const travelMin=km=>Math.max(5,Math.ceil(km*1.4/35*60/5)*5);
+const pk4=p=>p[0].toFixed(4)+','+p[1].toFixed(4);          // ~11 m de precisión
+const tkey=(a,b)=>pk4(a)+'>'+pk4(b);
+const estTravel=km=>Math.max(2,Math.round(km*1.35/32*60));
+function travelBetween(a,b){
+  const v=TC[tkey(a,b)];
+  return v!=null?{min:v,real:true}:{min:estTravel(haversineKm(a,b)),real:false};
+}
+async function osrmTable(pts){
+  const coords=pts.map(p=>p[1].toFixed(5)+','+p[0].toFixed(5)).join(';');
+  const ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),15000);
+  try{
+    const r=await fetch(TRAVEL_URL+coords+'?annotations=duration',{signal:ctl.signal});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    if(d.code!=='Ok'||!d.durations) throw new Error(d.code||'sin datos');
+    return d.durations;
+  } finally { clearTimeout(to); }
+}
+// Trae (y guarda) los tiempos entre TODOS los puntos que todavía no se conocen.
+// Devuelve {ok, pedidos, fallidos}. Nunca lanza: ante cualquier falla, queda la estimación.
+async function prefetchTravel(points,onProgress){
+  await tcLoad();
+  const seen=new Set(), U=[];
+  points.forEach(p=>{ const k=pk4(p); if(!seen.has(k)){ seen.add(k); U.push(p); } });
+  const missing=(A,B)=>A.some(a=>B.some(b=>pk4(a)!==pk4(b)&&TC[tkey(a,b)]==null));
+  const G=49, groups=[]; for(let i=0;i<U.length;i+=G) groups.push(U.slice(i,i+G));
+  const jobs=[];
+  for(let i=0;i<groups.length;i++) for(let j=i;j<groups.length;j++) if(missing(groups[i],groups[j])||missing(groups[j],groups[i])) jobs.push([i,j]);
+  let done=0, failed=0;
+  for(const [i,j] of jobs){
+    const pts=i===j?groups[i]:groups[i].concat(groups[j]);
+    try{
+      const D=await osrmTable(pts);
+      for(let x=0;x<pts.length;x++) for(let y=0;y<pts.length;y++){
+        if(x===y||D[x][y]==null||pk4(pts[x])===pk4(pts[y])) continue;
+        TC[tkey(pts[x],pts[y])]=Math.max(1,Math.round(D[x][y]/60)); tcDirty=true;
+      }
+      done++; if(onProgress) onProgress(done,jobs.length);
+      if(done<jobs.length) await new Promise(r=>setTimeout(r,400)); // uso respetuoso del servicio gratuito
+    }catch(e){ failed++; console.warn('[Traslados] no se pudo consultar:',e&&e.message||e); break; }
+  }
+  tcSave();
+  return {ok:!failed,pedidos:jobs.length,fallidos:failed};
+}
+window.cpPrefetchTravel=prefetchTravel;
 
 // campos del formulario de cliente
 function fillAssignOptions(selected){
@@ -8182,6 +8243,7 @@ function loadCfg(){
   try{
     const c=JSON.parse(localStorage.getItem(CFG_KEY)||'{}');
     if(c.endTime) document.getElementById('aa-end').value=c.endTime;
+    if(typeof c.buffer==='number') document.getElementById('aa-buf').value=c.buffer;
     if(c.time) document.getElementById('aa-time').value=c.time;
     if(c.weeks) document.getElementById('aa-weeks').value=c.weeks;
     if(typeof c.lunch==='boolean') document.getElementById('aa-lunch').checked=c.lunch;
@@ -8190,7 +8252,7 @@ function loadCfg(){
   }catch(e){}
 }
 function saveCfg(cfg){
-  try{localStorage.setItem(CFG_KEY,JSON.stringify({reorg:cfg.reorg,endTime:cfg.endTime,time:cfg.startTime,weeks:cfg.weeks,lunch:cfg.lunch,days:[...cfg.days]}));}catch(e){}
+  try{localStorage.setItem(CFG_KEY,JSON.stringify({buffer:cfg.buffer,reorg:cfg.reorg,endTime:cfg.endTime,time:cfg.startTime,weeks:cfg.weeks,lunch:cfg.lunch,days:[...cfg.days]}));}catch(e){}
 }
 function renderDayChips(){
   document.getElementById('aa-days').innerHTML=[1,2,3,4,5,6,0].map(d=>
@@ -8205,6 +8267,7 @@ function readCfg(){
     startTime:document.getElementById('aa-time').value||'09:00',
     lunch:document.getElementById('aa-lunch').checked,
     reorg:document.getElementById('aa-reorg').checked,
+    buffer:Math.max(0,Math.min(30,parseInt(document.getElementById('aa-buf').value)||0)),
     days:new Set(cfgDays)
   };
 }
@@ -8256,8 +8319,9 @@ function layoutDay(stops,cfg){
   const out=[];
   flex.forEach(s=>{
     const dur=durationMin(s.c);
-    if(hasGps(s.c)){ const pt=[s.c.lat,s.c.lng]; if(prev) t+=travelMin(haversineKm(prev,pt)); prev=pt; }
-    else if(out.length) t+=10;
+    let leg=0, real=false;
+    if(hasGps(s.c)){ const pt=[s.c.lat,s.c.lng]; if(prev){ const tb=travelBetween(prev,pt); leg=tb.min+(cfg.buffer||0); real=tb.real; t+=leg; } prev=pt; }
+    else if(out.length){ leg=10; t+=leg; }
     for(let k=0;k<6;k++){ // evitar choques con almuerzo y horas fijas
       let moved=false;
       if(cfg.lunch){
@@ -8267,13 +8331,13 @@ function layoutDay(stops,cfg){
       for(const a of anchored){ if(t<a.start+a.dur && t+dur>a.start){ t=a.start+a.dur; moved=true; } }
       if(!moved) break;
     }
-    out.push({...s,start:t,dur,end:t+dur}); t+=dur;
+    out.push({...s,start:t,dur,end:t+dur,travel:leg,treal:real}); t+=dur;
   });
   anchored.forEach(a=>out.push({...a,end:a.start+a.dur}));
   out.sort((a,b)=>a.start-b.start);
   let maxEnd=0;
   out.forEach((s,i)=>{ s.clash=i>0&&s.start<maxEnd; maxEnd=Math.max(maxEnd,s.end); });
-  return {stops:out,km:pathKm(out,base),endMin:maxEnd};
+  return {stops:out,km:pathKm(out,base),endMin:maxEnd,driveMin:out.reduce((a,s)=>a+(s.travel||0),0),workMin:out.reduce((a,s)=>a+s.dur,0)};
 }
 
 // ── propuesta ──
@@ -8339,30 +8403,47 @@ function buildProposal(cfg){
       if(!anchor){ const ks=Object.values(rel[c.id]||{}).map(r=>r.key).sort(); if(ks.length) anchor=pk(ks[0]); }
       anchor=anchor||sd;
     } else anchor=lastJobDate(c,endKey)||sd;
-    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+12)/period,anchor,sd,dow:null,phase:0});
+    elig.push({c,p,period,crew:p.assign||'',w:(durationMin(c)+10)/period,anchor,sd,dow:null,phase:0});
   });
-  // carga (minutos por semana) por responsable y día
-  const loads={};
+  // carga (minutos por semana) por responsable y día, y qué zonas ya hay en cada día
+  const loads={}, dayZones={};
   const L=crew=>loads[crew]||(loads[crew]=Object.fromEntries([...cfg.days].map(d=>[d,0])));
+  const DZ=(crew,d)=>{ const c=dayZones[crew]||(dayZones[crew]={}); return c[d]||(c[d]={zones:new Set(),pts:[]}); };
+  const placed=x=>{ const z=DZ(x.crew,x.dow); z.zones.add(x.c.zone||'—'); if(hasGps(x.c)) z.pts.push([x.c.lat,x.c.lng]); };
+  const centroid=pts=>pts.length?[pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length]:null;
   const auto=[];
   elig.forEach(x=>{
     if(x.p.dow!=null) x.dow=x.p.dow;
     else if(!reorg&&x.anchor&&cfg.days.has(x.anchor.getDay())) x.dow=x.anchor.getDay();
-    if(x.dow!=null){ const l=L(x.crew); l[x.dow]=(l[x.dow]||0)+x.w; } else auto.push(x);
+    if(x.dow!=null){ const l=L(x.crew); l[x.dow]=(l[x.dow]||0)+x.w; placed(x); } else auto.push(x);
   });
-  const minDay=crew=>{const l=L(crew);return [...cfg.days].sort((a,b)=>(l[a]-l[b])||(a-b))[0];};
+  // Reparto por ZONA: cada zona entera va junta en un día. Si una zona no entra en una jornada
+  // se parte en bloques de ~una jornada. Un bloque prefiere (1) un día donde ya está esa zona,
+  // (2) un día libre, (3) recién ahí mezclar, con el día de zona más cercana.
   const byCrew={};
   auto.forEach(x=>{((byCrew[x.crew]=byCrew[x.crew]||{})[x.c.zone||'—']=(byCrew[x.crew][x.c.zone||'—']||[])).push(x);});
   Object.entries(byCrew).forEach(([crew,zones])=>{
-    // meta por día: repartir parejo entre los días de trabajo (sin pasar la jornada)
-    const totalW=elig.filter(x=>x.crew===crew).reduce((a,x)=>a+x.w,0);
-    const target=Math.min(capMin,Math.ceil(totalW/cfg.days.size*1.1));
-    Object.values(zones).sort((a,b)=>b.length-a.length).forEach(list=>{
-      const l=L(crew); let day=minDay(crew);
-      angleSort(list).forEach(x=>{
-        if(l[day]+x.w>target+1e-9) day=minDay(crew);
-        x.dow=day; l[day]+=x.w;
+    const l=L(crew), blocks=[];
+    Object.entries(zones).forEach(([z,list])=>{
+      const sorted=angleSort(list), W=sorted.reduce((a,x)=>a+x.w,0);
+      const n=Math.max(1,Math.ceil(W/capMin-1e-9)), per=W/n, parts=Array.from({length:n},()=>[]);
+      let acc=0;
+      sorted.forEach(x=>{ parts[Math.min(n-1,Math.floor((acc+x.w/2)/per))].push(x); acc+=x.w; });
+      parts.filter(pt=>pt.length).forEach(pt=>blocks.push({zone:z,list:pt,w:pt.reduce((a,x)=>a+x.w,0),cen:centroid(pt.filter(x=>hasGps(x.c)).map(x=>[x.c.lat,x.c.lng]))}));
+    });
+    blocks.sort((a,b)=>b.w-a.w);
+    blocks.forEach(blk=>{
+      let best=null,bs=Infinity;
+      [...cfg.days].forEach(d=>{
+        const st=DZ(crew,d), load=l[d]||0;
+        let sc;
+        if(st.zones.has(blk.zone)) sc=load/1000;                       // seguir con la misma zona
+        else if(st.zones.size===0) sc=100+load/1000;                    // día libre
+        else{ const cd=centroid(st.pts); const dist=(cd&&blk.cen)?haversineKm(cd,blk.cen):8; sc=1000+dist*10+st.zones.size*200; } // mezclar: la zona más cercana
+        if(load+blk.w>capMin+1e-9) sc+=100000+load;                     // solo si no hay otra salida
+        if(sc<bs){bs=sc;best=d;}
       });
+      blk.list.forEach(x=>{ x.dow=best; l[best]+=x.w; placed(x); });
     });
   });
   // fase para quincenales / 4 semanas sin antecedente: alternar para equilibrar
@@ -8436,10 +8517,21 @@ window.cpAaCalc=async function(){
     await Promise.race([syncTrabajosForRange(from,to),new Promise(r=>setTimeout(r,6000))]);
   }catch(e){}
   try{ await refreshUsersCache(); }catch(e){}
-  PROP=buildProposal(cfg);
+  // tiempos de traslado reales entre todos los clientes del plan y la base
+  let trv={ok:true,pedidos:0,fallidos:0};
+  try{
+    const pts=[]; const b=(typeof baseLocation!=='undefined')?baseLocation:null;
+    if(b&&validCoord(b.lat,b.lng)) pts.push([b.lat,b.lng]);
+    clients.forEach(c=>{ if(!c.deleted&&c.status==='activo'&&cpResolvePlan(c).freq!=='none'&&hasGps(c)) pts.push([c.lat,c.lng]); });
+    prev.innerHTML='<div class="aa-sum">⏳ Calculando traslados reales por calle…</div>';
+    trv=await prefetchTravel(pts,(d,n)=>{ prev.innerHTML='<div class="aa-sum">⏳ Calculando traslados reales por calle… '+d+' de '+n+'</div>'; });
+  }catch(e){ trv={ok:false,pedidos:1,fallidos:1}; }
+  PROP=buildProposal(cfg); PROP.trv=trv;
   renderProposal();
 };
 const fromLbl=k=>{const d=pk(k);return d.getDate()+' '+MONTHN[d.getMonth()];};
+const zonesOf=d=>[...new Set(d.crews.flatMap(c=>c.stops.map(s=>s.c.zone||'—')))];
+const mixedDay=d=>d.crews.some(c=>new Set(c.stops.map(s=>s.c.zone||'—')).size>1);
 function crewLabel(crew){ if(!crew) return 'Sin responsable'; const r=resolveAssign(crew); return r.label||'Responsable'; }
 function renderProposal(){
   const P=PROP, prev=document.getElementById('aa-prev');
@@ -8455,13 +8547,20 @@ function renderProposal(){
     else nSame++;
   })));
   P.counts={nNew,nMoved,nRetimed,nSame};
+  let driveT=0,workT=0,legsReal=0,legsEst=0;
+  act.forEach(d=>d.crews.forEach(c=>{ driveT+=c.lay.driveMin; workT+=c.lay.workMin; c.lay.stops.forEach(s=>{ if(s.travel>0&&!s.p.time){ s.treal?legsReal++:legsEst++; } }); }));
+  const hm=m=>Math.floor(m/60)+' h '+pad2(m%60)+' min';
+  const mixed=act.filter(mixedDay).length;
   let sum=`<div class="aa-sum">${fromLbl(dkey(P.cfg.start))} → ${fromLbl(dkey(P.end))} · <b>${visits} visitas</b> en <b>${act.length} días</b> · ~${km.toFixed(0)} km de ruta<br>`+
     (P.cfg.reorg?`<b>${nNew}</b> nuevas · <b>${nMoved}</b> cambian de día · <b>${nRetimed}</b> cambian de horario · ${nSame} sin cambios<br>`:'')+
+    `🧽 ${hm(workT)} de trabajo · 🚗 ${hm(driveT)} de traslados (con margen)<br>`+
+    (legsEst&&P.trv&&!P.trv.ok?`<span class="aa-warn">⚠ No pude consultar el servicio de rutas: ${legsEst} traslados son estimados (distancia × 1,35 a 32 km/h). Con internet, volvé a calcular.</span><br>`:(legsEst?`<span style="color:var(--text3)">${legsReal} traslados con tiempo real de ruta · ${legsEst} estimados (sin ubicación o fuera de caché)</span><br>`:`<span style="color:var(--text3)">Traslados con tiempo real de ruta por calle</span><br>`))+
     `${st.clients} clientes con plan activo`+
     (st.covered?(P.cfg.reorg?` · ${st.covered} ya tienen visita realizada o en curso esas semanas (no se tocan)`:` · ${st.covered} ya tenían visita esas semanas (no se tocan)`):'')+
     (st.leftover?`<br><span class="aa-warn">⚠ ${st.leftover} visita(s) pendiente(s) no encajan en el plan (ej. repetidas en la misma semana) y quedan como estaban</span>`:'')+
     (st.skipNone?` · ${st.skipNone} activos fuera de la bandeja (no se agendan)`:'')+
     (st.noGps?`<br><span class="aa-warn">⚠ ${st.noGps} sin ubicación GPS: van al final del día sin optimizar</span>`:'')+
+    (mixed?`<br><span class="aa-warn">⚠ ${mixed} día(s) mezclan zonas: no entraba cada zona en un solo día (revisá el equipo, los días de trabajo o la jornada).</span>`:'')+
     (st.overDays?`<br><span class="aa-warn">⚠ ${st.overDays} días pasan de las ${P.cfg.endTime}: con esa carga no alcanza un solo equipo. Asigná responsables en el plan de los clientes, sumá días de trabajo o sacá visitas con ✕.</span>`:'')+`</div>`;
   if(!P.days.length) sum+='<div class="agenda-empty">No hay visitas para generar ni reorganizar en ese período. Revisá el plan de los clientes (frecuencia y día) o ampliá las semanas.</div>';
   const html=P.days.map((d,i)=>{
@@ -8469,11 +8568,11 @@ function renderProposal(){
     const rows=d.crews.map(c=>
       (st.multiCrew?`<div class="aa-stop" style="background:var(--pdim);font-weight:800;color:var(--c6)">${esc(crewLabel(c.crew))} · ${c.stops.length} visitas · ${c.lay.km.toFixed(0)} km</div>`:'')+
       c.lay.stops.map(s=>`<div class="aa-stop"><span class="t">${fmt(s.start)}–${fmt(s.end)}</span><span class="n">${esc(s.c.n)}</span>`+
-        `<span class="z">${s.job&&s.fromKey!==d.key?'<span style="color:var(--c6);font-weight:800">↪ desde '+fromLbl(s.fromKey)+'</span> ':''}${s.p.time?'⚓ ':''}${s.clash?'<span class="aa-warn">⚠ se pisa </span>':''}${hasGps(s.c)?'':'⚠ '}${esc(s.c.zone||'')}</span><span class="x" onclick="cpAaRemove(${i},${s.c.id})">✕</span></div>`).join('')
+        `<span class="z">${s.travel?'🚗 '+s.travel+'′ · ':''}${s.job&&s.fromKey!==d.key?'<span style="color:var(--c6);font-weight:800">↪ desde '+fromLbl(s.fromKey)+'</span> ':''}${s.p.time?'⚓ ':''}${s.clash?'<span class="aa-warn">⚠ se pisa </span>':''}${hasGps(s.c)?'':'⚠ '}${esc(s.c.zone||'')}</span><span class="x" onclick="cpAaRemove(${i},${s.c.id})">✕</span></div>`).join('')
     ).join('');
     return `<details class="aa-day${d.on?'':' off'}"><summary><input type="checkbox" ${d.on?'checked':''} onclick="event.stopPropagation();cpAaToggle(${i})" style="margin:0">`+
       `<span style="text-transform:capitalize">${dayLabel(d.key)}</span>`+
-      `<span class="aa-day-meta">${dayStops(d)} visitas${over?' <span class="aa-warn">⚠ pasa de la jornada</span>':''}<br>${dayKm(d).toFixed(0)} km · hasta ${fmt(dayEnd(d))}</span></summary>${rows}</details>`;
+      `<span class="aa-day-meta">${dayStops(d)} visitas · <span${mixedDay(d)?' class="aa-warn"':''}>${zonesOf(d).map(esc).join(' + ')}</span>${over?' <span class="aa-warn">⚠ pasa de la jornada</span>':''}<br>${dayKm(d).toFixed(0)} km · hasta ${fmt(dayEnd(d))}</span></summary>${rows}</details>`;
   }).join('');
   prev.innerHTML=sum+html;
   setActions(`<div class="bcancel" onclick="cpAaBack()">← Ajustar</div><div class="bconfirm" onclick="cpAaCommit()" ${(nNew+nMoved+nRetimed)?'':'style="opacity:.4;pointer-events:none"'}>${P.cfg.reorg?`Aplicar (${nNew} nuevas · ${nMoved+nRetimed} reorganizadas) ✓`:`Agendar ${visits} visitas ✓`}</div>`);
